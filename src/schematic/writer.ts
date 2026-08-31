@@ -1,0 +1,70 @@
+import { encode, Int, Short } from '@enginehub/nbt-ts';
+import { gzipSync } from 'node:zlib';
+import type { BuildProject } from '../core/build-project.js';
+import { blockStateKey, type BlockState } from '../core/types.js';
+import { encodeVarInt } from './varint.js';
+import { DATA_VERSION } from './data-version.js';
+
+const AIR: BlockState = { id: 'minecraft:air' };
+
+/**
+ * Serializes a BuildProject into a gzip-compressed Sponge Schematic v3
+ * (.schem) buffer, ready to write to disk. Throws if the project has no
+ * blocks (there is no meaningful bounding box to export).
+ */
+export function writeSchematic(project: BuildProject): Buffer {
+  const bbox = project.getBoundingBox();
+  if (!bbox) {
+    throw new Error(`Project "${project.name}" has no blocks to export.`);
+  }
+
+  const width = bbox.max.x - bbox.min.x + 1;
+  const height = bbox.max.y - bbox.min.y + 1;
+  const length = bbox.max.z - bbox.min.z + 1;
+
+  const palette = new Map<string, number>();
+  function paletteIdFor(block: BlockState): number {
+    const key = blockStateKey(block);
+    let id = palette.get(key);
+    if (id === undefined) {
+      id = palette.size;
+      palette.set(key, id);
+    }
+    return id;
+  }
+  // Reserve id 0 for air so the common "empty space" case is cheap.
+  paletteIdFor(AIR);
+
+  const dataBytes: number[] = [];
+  for (let y = 0; y < height; y++) {
+    for (let z = 0; z < length; z++) {
+      for (let x = 0; x < width; x++) {
+        const worldPos = { x: x + bbox.min.x, y: y + bbox.min.y, z: z + bbox.min.z };
+        const block = project.getBlock(worldPos) ?? AIR;
+        dataBytes.push(...encodeVarInt(paletteIdFor(block)));
+      }
+    }
+  }
+
+  const paletteCompound: Record<string, Int> = {};
+  for (const [key, id] of palette) {
+    paletteCompound[key] = new Int(id);
+  }
+
+  const schematicCompound = {
+    Version: new Int(3),
+    DataVersion: new Int(DATA_VERSION),
+    Width: new Short(width),
+    Height: new Short(height),
+    Length: new Short(length),
+    Offset: new Int32Array([0, 0, 0]),
+    Blocks: {
+      Palette: paletteCompound,
+      Data: Buffer.from(dataBytes),
+      BlockEntities: [] as never[]
+    }
+  };
+
+  const uncompressed = encode('', { Schematic: schematicCompound });
+  return gzipSync(uncompressed);
+}
