@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BuildProject } from '../../src/core/build-project.js';
-import { fillBox, outlineBox, line, wall } from '../../src/core/shapes.js';
+import { fillBox, outlineBox, line, wall, sphere, cylinder } from '../../src/core/shapes.js';
 
 const STONE = { id: 'minecraft:stone' };
 
@@ -61,5 +61,44 @@ describe('wall', () => {
   it('rejects a non-positive height', () => {
     const project = new BuildProject('demo');
     expect(() => wall(project, { x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }, 0, STONE)).toThrow();
+  });
+});
+
+describe('sphere', () => {
+  it('places a single block for radius 0', () => {
+    const project = new BuildProject('demo');
+    sphere(project, { x: 5, y: 5, z: 5 }, 0, STONE);
+    expect(project.getBlockCounts()).toEqual({ 'minecraft:stone': 1 });
+    expect(project.getBlock({ x: 5, y: 5, z: 5 })).toEqual(STONE);
+  });
+
+  it('leaves the center empty when hollow with radius 2', () => {
+    const project = new BuildProject('demo');
+    sphere(project, { x: 0, y: 0, z: 0 }, 2, STONE, true);
+    expect(project.getBlock({ x: 0, y: 0, z: 0 })).toBeUndefined();
+    expect(project.getBlock({ x: 2, y: 0, z: 0 })).toEqual(STONE);
+  });
+
+  it('rejects a negative radius', () => {
+    const project = new BuildProject('demo');
+    expect(() => sphere(project, { x: 0, y: 0, z: 0 }, -1, STONE)).toThrow();
+  });
+});
+
+describe('cylinder', () => {
+  it('builds a solid cylinder with the given radius and height', () => {
+    const project = new BuildProject('demo');
+    cylinder(project, { x: 0, y: 0, z: 0 }, 1, 2, STONE);
+    // radius-1 circle on a square grid (-1..1, -1..1) covers 5 cells per
+    // layer (corners excluded: dist^2 = 2 > 1), times 2 layers = 10.
+    expect(project.getBlockCounts()).toEqual({ 'minecraft:stone': 10 });
+    expect(project.getBlock({ x: 0, y: 0, z: 0 })).toEqual(STONE);
+    expect(project.getBlock({ x: 1, y: 0, z: 1 })).toBeUndefined(); // corner excluded
+    expect(project.getBlock({ x: 0, y: 2, z: 0 })).toBeUndefined(); // above height
+  });
+
+  it('rejects a non-positive height', () => {
+    const project = new BuildProject('demo');
+    expect(() => cylinder(project, { x: 0, y: 0, z: 0 }, 1, 0, STONE)).toThrow();
   });
 });

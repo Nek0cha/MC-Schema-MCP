@@ -98,3 +98,65 @@ export function wall(
     }
   }
 }
+
+export function sphere(
+  project: BuildProject,
+  center: Vec3,
+  radius: number,
+  block: BlockOrPalette,
+  hollow = false
+): void {
+  if (radius < 0) {
+    throw new Error(`sphere radius must be non-negative, got ${radius}.`);
+  }
+  const r = Math.round(radius);
+  const rSquared = r * r;
+  const innerSquared = hollow ? (r - 1) * (r - 1) : -1;
+
+  for (let x = -r; x <= r; x++) {
+    for (let y = -r; y <= r; y++) {
+      for (let z = -r; z <= r; z++) {
+        const distSquared = x * x + y * y + z * z;
+        if (distSquared > rSquared) continue;
+        if (hollow && distSquared < innerSquared) continue;
+        project.setBlock(
+          { x: center.x + x, y: center.y + y, z: center.z + z },
+          resolveBlock(block)
+        );
+      }
+    }
+  }
+}
+
+export function cylinder(
+  project: BuildProject,
+  center: Vec3,
+  radius: number,
+  height: number,
+  block: BlockOrPalette,
+  hollow = false
+): void {
+  if (radius < 0) {
+    throw new Error(`cylinder radius must be non-negative, got ${radius}.`);
+  }
+  if (height < 1) {
+    throw new Error(`cylinder height must be at least 1, got ${height}.`);
+  }
+  const r = Math.round(radius);
+  const rSquared = r * r;
+  const innerSquared = hollow ? (r - 1) * (r - 1) : -1;
+
+  for (let dy = 0; dy < height; dy++) {
+    for (let x = -r; x <= r; x++) {
+      for (let z = -r; z <= r; z++) {
+        const distSquared = x * x + z * z;
+        if (distSquared > rSquared) continue;
+        if (hollow && distSquared < innerSquared) continue;
+        project.setBlock(
+          { x: center.x + x, y: center.y + dy, z: center.z + z },
+          resolveBlock(block)
+        );
+      }
+    }
+  }
+}
