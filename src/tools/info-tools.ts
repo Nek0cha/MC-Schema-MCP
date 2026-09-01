@@ -1,5 +1,5 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import type { ProjectManager } from '../core/project-manager.js';
 import { writeSchematic } from '../schematic/writer.js';
 import { textResult, type ToolTextResult } from './result.js';
@@ -32,7 +32,7 @@ export function exportSchematicHandler(manager: ProjectManager): ToolTextResult 
   const project = manager.getActive();
   const buffer = writeSchematic(project);
   mkdirSync(OUTPUT_DIR, { recursive: true });
-  const outputPath = join(OUTPUT_DIR, `${project.name}.schem`);
+  const outputPath = join(OUTPUT_DIR, `${basename(project.name)}.schem`);
   writeFileSync(outputPath, buffer);
-  return textResult(`Exported to ${outputPath}`);
+  return textResult(`Exported to ${resolve(outputPath)}`);
 }

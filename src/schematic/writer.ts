@@ -22,6 +22,23 @@ export function writeSchematic(project: BuildProject): Buffer {
   const height = bbox.max.y - bbox.min.y + 1;
   const length = bbox.max.z - bbox.min.z + 1;
 
+  const MAX_DIMENSION = 32767; // NBT Short max
+  if (width > MAX_DIMENSION || height > MAX_DIMENSION || length > MAX_DIMENSION) {
+    throw new Error(
+      `Project "${project.name}" spans ${width}x${height}x${length}, exceeding the ` +
+        `${MAX_DIMENSION}-block-per-axis limit the Sponge Schematic format's Short fields allow.`
+    );
+  }
+  const volume = width * height * length;
+  const MAX_VOLUME = 16_000_000; // ~256^3, generous cap for a dense-format export
+  if (volume > MAX_VOLUME) {
+    throw new Error(
+      `Project "${project.name}" spans ${width}x${height}x${length} = ${volume} cells, ` +
+        `over the ${MAX_VOLUME}-cell limit. Schematics are dense, so a sparse build with far-apart ` +
+        `blocks still costs its full bounding box.`
+    );
+  }
+
   const palette = new Map<string, number>();
   function paletteIdFor(block: BlockState): number {
     const key = blockStateKey(block);

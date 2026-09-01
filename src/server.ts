@@ -19,6 +19,9 @@ import {
 import { getBuildInfoHandler, exportSchematicHandler } from './tools/info-tools.js';
 
 const vec3Shape = { x: z.number().int(), y: z.number().int(), z: z.number().int() };
+const projectNameSchema = z
+  .string()
+  .regex(/^[A-Za-z0-9][A-Za-z0-9 _-]*$/, 'Project name may contain only letters, digits, spaces, hyphens and underscores.');
 const blockStateSchema = z.object({
   id: z.string(),
   properties: z.record(z.string()).optional()
@@ -34,7 +37,7 @@ export function createServer(): McpServer {
 
   server.registerTool(
     'createProject',
-    { description: 'Create a new build project and make it active.', inputSchema: { name: z.string() } },
+    { description: 'Create a new build project and make it active.', inputSchema: { name: projectNameSchema } },
     async ({ name }) => createProjectHandler(manager, { name })
   );
 
@@ -152,7 +155,12 @@ export function createServer(): McpServer {
 
   server.registerTool(
     'exportSchematic',
-    { description: 'Export the active project to a .schem file in ./output.', inputSchema: {} },
+    {
+      description:
+        'Export the active project to ./output/<projectName>.schem and return the absolute path. ' +
+        'Project names may contain only letters, digits, spaces, hyphens and underscores.',
+      inputSchema: {}
+    },
     async () => exportSchematicHandler(manager)
   );
 
