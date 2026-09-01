@@ -1,4 +1,4 @@
-import type { BuildProject } from '../core/build-project.js';
+import { parseVoxelKey, type BuildProject } from '../core/build-project.js';
 import type { BlockState, Vec3 } from '../core/types.js';
 
 const AIR = 'minecraft:air';
@@ -110,11 +110,6 @@ function wallConnectsTo(neighborId: string): WallHeight {
   return isSolidFullCube(neighborId) ? 'low' : 'none';
 }
 
-function parseKey(key: string): Vec3 {
-  const [x, y, z] = key.split(',').map(Number);
-  return { x, y, z };
-}
-
 function neighborIdAt(project: BuildProject, pos: Vec3, direction: Direction): string {
   const offset = NEIGHBOR_OFFSETS[direction];
   const neighbor = project.getBlock({
@@ -156,7 +151,8 @@ function withWallConnections(project: BuildProject, pos: Vec3, block: BlockState
     heights.north !== 'none' && heights.south !== 'none' && heights.east === 'none' && heights.west === 'none';
   const isStraightEastWest =
     heights.east !== 'none' && heights.west !== 'none' && heights.north === 'none' && heights.south === 'none';
-  const hasBlockAbove = project.getBlock({ x: pos.x, y: pos.y + 1, z: pos.z }) !== undefined;
+  const abovePos = { x: pos.x, y: pos.y + 1, z: pos.z };
+  const hasBlockAbove = (project.getBlock(abovePos)?.id ?? AIR) !== AIR;
   const isStraightRun = isStraightNorthSouth || isStraightEastWest;
   const up = hasBlockAbove || connectedCount <= 1 || !isStraightRun;
 
@@ -170,19 +166,22 @@ function withWallConnections(project: BuildProject, pos: Vec3, block: BlockState
  * next to them in the finished build. This is a read-only pass over the
  * project's voxels run at export time; it never mutates the project
  * itself, so the values AI-supplied while building stay untouched.
+ *
+ * Returns only the overrides — one entry per connectable block that
+ * needs its properties rewritten — rather than a full copy of every
+ * voxel, so a caller iterating the whole build should fall back to the
+ * project's own blocks for keys not present here.
  */
 export function resolveConnections(project: BuildProject): Map<string, BlockState> {
   const resolved = new Map<string, BlockState>();
   for (const [key, block] of project.voxels) {
-    const pos = parseKey(key);
+    const pos = parseVoxelKey(key);
     if (isFenceFamily(block.id)) {
       resolved.set(key, withDirectionalConnections(project, pos, block, fenceConnectsTo));
     } else if (isPaneFamily(block.id)) {
       resolved.set(key, withDirectionalConnections(project, pos, block, paneConnectsTo));
     } else if (isWallFamily(block.id)) {
       resolved.set(key, withWallConnections(project, pos, block));
-    } else {
-      resolved.set(key, block);
     }
   }
   return resolved;

@@ -9,6 +9,11 @@ export function voxelKey(pos: Vec3): string {
   return `${pos.x},${pos.y},${pos.z}`;
 }
 
+export function parseVoxelKey(key: string): Vec3 {
+  const [x, y, z] = key.split(',').map(Number);
+  return { x, y, z };
+}
+
 export class BuildProject {
   readonly name: string;
   readonly voxels = new Map<string, BlockState>();
@@ -36,7 +41,7 @@ export class BuildProject {
     let maxY = -Infinity;
     let maxZ = -Infinity;
     for (const key of this.voxels.keys()) {
-      const [x, y, z] = key.split(',').map(Number);
+      const { x, y, z } = parseVoxelKey(key);
       if (x < minX) minX = x;
       if (y < minY) minY = y;
       if (z < minZ) minZ = z;

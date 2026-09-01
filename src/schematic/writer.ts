@@ -40,9 +40,10 @@ export function writeSchematic(project: BuildProject): Buffer {
     );
   }
 
-  const resolvedBlocks = resolveConnections(project);
+  const connectionOverrides = resolveConnections(project);
   function blockAt(worldPos: Vec3): BlockState {
-    return resolvedBlocks.get(voxelKey(worldPos)) ?? AIR;
+    const key = voxelKey(worldPos);
+    return connectionOverrides.get(key) ?? project.getBlock(worldPos) ?? AIR;
   }
 
   const palette = new Map<string, number>();

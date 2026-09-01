@@ -7,13 +7,13 @@ function keyOf(x: number, y: number, z: number): string {
 }
 
 describe('resolveConnections', () => {
-  it('leaves non-connectable blocks untouched', () => {
+  it('omits non-connectable blocks from the override map', () => {
     const project = new BuildProject('test');
     project.setBlock({ x: 0, y: 0, z: 0 }, { id: 'minecraft:stone' });
 
     const resolved = resolveConnections(project);
 
-    expect(resolved.get(keyOf(0, 0, 0))).toEqual({ id: 'minecraft:stone' });
+    expect(resolved.has(keyOf(0, 0, 0))).toBe(false);
   });
 
   it('gives an isolated fence no connections', () => {
@@ -183,6 +183,19 @@ describe('resolveConnections', () => {
     const resolved = resolveConnections(project);
 
     expect(resolved.get(keyOf(0, 0, 0))?.properties).toMatchObject({ east: 'low' });
+  });
+
+  it('does not force up:true when an explicit air block sits directly above', () => {
+    const project = new BuildProject('test');
+    project.setBlock({ x: 0, y: 0, z: 0 }, { id: 'minecraft:cobblestone_wall' });
+    project.setBlock({ x: 0, y: 0, z: -1 }, { id: 'minecraft:cobblestone_wall' });
+    project.setBlock({ x: 0, y: 0, z: 1 }, { id: 'minecraft:cobblestone_wall' });
+    // Explicitly carved to air (e.g. by a fillBox carve), not merely unset.
+    project.setBlock({ x: 0, y: 1, z: 0 }, { id: 'minecraft:air' });
+
+    const resolved = resolveConnections(project);
+
+    expect(resolved.get(keyOf(0, 0, 0))?.properties).toMatchObject({ up: 'false' });
   });
 
   it('forces up:true on a straight run when a block sits directly above', () => {
