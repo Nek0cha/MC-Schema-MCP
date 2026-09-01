@@ -17,6 +17,7 @@ import {
   cylinderHandler
 } from './tools/shape-tools.js';
 import { getBuildInfoHandler, exportSchematicHandler } from './tools/info-tools.js';
+import { previewBuildHandler, createPreviewServerState } from './tools/preview-tools.js';
 
 // Factories, not shared instances: each call site gets its own zod schema
 // object so zod-to-json-schema inlines the generated JSON Schema instead of
@@ -39,6 +40,7 @@ const blockOrPaletteSchema = () =>
 
 export function createServer(): McpServer {
   const manager = new ProjectManager();
+  const previewState = createPreviewServerState();
   const server = new McpServer({ name: 'mc-schema-mcp', version: '0.1.0' });
 
   server.registerTool(
@@ -168,6 +170,18 @@ export function createServer(): McpServer {
       inputSchema: {}
     },
     async () => exportSchematicHandler(manager)
+  );
+
+  server.registerTool(
+    'previewBuild',
+    {
+      description:
+        'Start (or reuse) a local preview server for the active project and return its URL. ' +
+        'Open the URL in a browser to see a layer-by-layer 2D view: switch Y layers, hover a ' +
+        'cell for its coordinates and block id, click a cell to copy "x, y, z" to the clipboard.',
+      inputSchema: {}
+    },
+    async () => previewBuildHandler(manager, previewState)
   );
 
   return server;
