@@ -3,7 +3,7 @@
  * natural-looking color instead of a hashed one. Not exhaustive by
  * design — everything else falls back to colorFor's hash-based color.
  */
-const MANUAL_COLORS: Record<string, string> = {
+export const MANUAL_COLORS: Record<string, string> = {
   'minecraft:air': '#2a2a2a',
   'minecraft:stone': '#8a8a8a',
   'minecraft:cobblestone': '#7a7a7a',

@@ -1,3 +1,5 @@
+import { MANUAL_COLORS } from './block-colors.js';
+
 /**
  * Renders the build preview page: a single self-contained HTML document
  * (inline CSS/JS, no external requests) that fetches /api/build, renders
@@ -5,8 +7,11 @@
  * zoom/pan, hover a cell for its coordinates + block id, and click a
  * cell to copy "x, y, z" to the clipboard.
  *
- * The color logic here intentionally duplicates src/preview/block-colors.ts
- * (see the design spec) so this page stays a single static file with no
+ * The MANUAL_COLORS table is imported from src/preview/block-colors.ts and
+ * interpolated into the generated page (via JSON.stringify) so there is
+ * exactly one source of truth for it. The hash function itself is
+ * re-implemented inline below (it's pure algorithmic logic with no data to
+ * drift, unlike the table) so this page stays a single static file with no
  * server-side templating step.
  */
 export function buildViewerHtml(): string {
@@ -43,24 +48,7 @@ export function buildViewerHtml(): string {
   </div>
 <script>
 (function () {
-  var MANUAL_COLORS = {
-    'minecraft:air': '#2a2a2a',
-    'minecraft:stone': '#8a8a8a',
-    'minecraft:cobblestone': '#7a7a7a',
-    'minecraft:dirt': '#7a5230',
-    'minecraft:grass_block': '#5b8a3c',
-    'minecraft:oak_planks': '#b98b52',
-    'minecraft:oak_log': '#6b5233',
-    'minecraft:sand': '#ded2a0',
-    'minecraft:gravel': '#8d8478',
-    'minecraft:water': '#3d6fd1',
-    'minecraft:glass': '#bfe3f0',
-    'minecraft:white_wool': '#e8e8e8',
-    'minecraft:bricks': '#9a5040',
-    'minecraft:iron_bars': '#a8a8a8',
-    'minecraft:oak_fence': '#b98b52',
-    'minecraft:cobblestone_wall': '#7a7a7a'
-  };
+  var MANUAL_COLORS = ${JSON.stringify(MANUAL_COLORS)};
 
   function hashString(str) {
     var hash = 0;

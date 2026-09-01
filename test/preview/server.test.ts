@@ -1,7 +1,7 @@
+import { createServer, type Server } from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ProjectManager } from '../../src/core/project-manager.js';
 import { PreviewServer } from '../../src/preview/server.js';
-import type { BuildProject } from '../../src/core/build-project.js';
 
 describe('PreviewServer', () => {
   let server: PreviewServer | null = null;
@@ -24,6 +24,7 @@ describe('PreviewServer', () => {
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toContain('text/html');
     expect(body).toContain('<title>');
+    expect(body).toContain('/api/build');
   });
 
   it('reuses the same port on a second ensureStarted call', async () => {
@@ -113,6 +114,59 @@ describe('PreviewServer', () => {
     const response = await fetch(`http://127.0.0.1:${port}/api/build`);
 
     expect(response.status).toBe(404);
+  });
+
+  it('recovers from a failed start instead of permanently caching the rejection', async () => {
+    // Occupy a fixed port with another listener so PreviewServer's own
+    // listen() call on that exact port fails deterministically.
+    const blocker: Server = createServer();
+    await new Promise<void>((resolve, reject) => {
+      blocker.on('error', reject);
+      blocker.listen(0, '127.0.0.1', () => resolve());
+    });
+    const blockerAddress = blocker.address();
+    if (blockerAddress === null || typeof blockerAddress === 'string') {
+      throw new Error('Failed to determine the blocking server port.');
+    }
+    const blockedPort = blockerAddress.port;
+
+    const manager = new ProjectManager();
+    server = new PreviewServer(manager, blockedPort);
+
+    await expect(server.ensureStarted()).rejects.toThrow();
+    // A second call while the port is still occupied must also reject
+    // (not hang or silently succeed) rather than throwing away the retry.
+    await expect(server.ensureStarted()).rejects.toThrow();
+
+    await new Promise<void>((resolve) => blocker.close(() => resolve()));
+
+    // Now that the port is free, a subsequent ensureStarted() must succeed
+    // instead of replaying the earlier rejection forever.
+    const port = await server.ensureStarted();
+    expect(port).toBe(blockedPort);
+
+    const response = await fetch(`http://127.0.0.1:${port}/`);
+    expect(response.status).toBe(200);
+  });
+
+  it('close() is safe to call even when the start attempt failed', async () => {
+    const blocker: Server = createServer();
+    await new Promise<void>((resolve, reject) => {
+      blocker.on('error', reject);
+      blocker.listen(0, '127.0.0.1', () => resolve());
+    });
+    const blockerAddress = blocker.address();
+    if (blockerAddress === null || typeof blockerAddress === 'string') {
+      throw new Error('Failed to determine the blocking server port.');
+    }
+
+    const manager = new ProjectManager();
+    server = new PreviewServer(manager, blockerAddress.port);
+
+    await expect(server.ensureStarted()).rejects.toThrow();
+    await expect(server.close()).resolves.toBeUndefined();
+
+    await new Promise<void>((resolve) => blocker.close(() => resolve()));
   });
 
   it('returns empty bounds and blocks for a project with no blocks', async () => {

@@ -9,7 +9,16 @@ export class PreviewServer {
   private port: number | null = null;
   private startPromise: Promise<number> | null = null;
 
-  constructor(manager: ProjectManager) {
+  /**
+   * `listenPort` defaults to 0 (OS-assigned, the normal production
+   * behavior). Tests may pass a fixed port to deterministically force a
+   * listen failure (e.g. by pre-occupying that port with another server),
+   * to exercise ensureStarted()'s failure-recovery path.
+   */
+  constructor(
+    manager: ProjectManager,
+    private readonly listenPort = 0
+  ) {
     this.manager = manager;
   }
 
@@ -18,10 +27,10 @@ export class PreviewServer {
       return Promise.resolve(this.port);
     }
     if (!this.startPromise) {
-      this.startPromise = new Promise((resolve, reject) => {
+      this.startPromise = new Promise<number>((resolve, reject) => {
         const server = createServer((req, res) => this.handleRequest(req, res));
         server.on('error', reject);
-        server.listen(0, '127.0.0.1', () => {
+        server.listen(this.listenPort, '127.0.0.1', () => {
           const address = server.address();
           if (address === null || typeof address === 'string') {
             reject(new Error('Failed to determine the preview server port.'));
@@ -35,19 +44,37 @@ export class PreviewServer {
           this.port = address.port;
           resolve(this.port);
         });
+      }).catch((err: unknown) => {
+        // Don't let a transient failure (EADDRINUSE, EMFILE, ...) wedge this
+        // instance forever — clear the cached promise so the next
+        // ensureStarted() call gets a fresh attempt instead of replaying the
+        // same rejection for the life of the process.
+        this.startPromise = null;
+        throw err;
       });
     }
     return this.startPromise;
   }
 
   close(): Promise<void> {
-    return (this.startPromise ?? Promise.resolve()).then(() => {
+    return (this.startPromise ?? Promise.resolve()).catch(() => {
+      // A failed start has nothing listening to close; swallow it so
+      // close() is always safe to call regardless of start outcome.
+    }).then(() => {
       return new Promise((resolve) => {
         if (!this.server) {
+          this.server = null;
+          this.port = null;
+          this.startPromise = null;
           resolve();
           return;
         }
-        this.server.close(() => resolve());
+        this.server.close(() => {
+          this.server = null;
+          this.port = null;
+          this.startPromise = null;
+          resolve();
+        });
       });
     });
   }
