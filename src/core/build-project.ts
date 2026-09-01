@@ -5,7 +5,7 @@ export interface BoundingBox {
   max: Vec3;
 }
 
-function voxelKey(pos: Vec3): string {
+export function voxelKey(pos: Vec3): string {
   return `${pos.x},${pos.y},${pos.z}`;
 }
 
