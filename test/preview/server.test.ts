@@ -44,4 +44,22 @@ describe('PreviewServer', () => {
 
     expect(response.status).toBe(404);
   });
+
+  it('handles concurrent ensureStarted calls without creating duplicate servers', async () => {
+    const manager = new ProjectManager();
+    server = new PreviewServer(manager);
+
+    // Call ensureStarted twice concurrently (without awaiting the first)
+    const [firstPort, secondPort] = await Promise.all([
+      server.ensureStarted(),
+      server.ensureStarted(),
+    ]);
+
+    // Both should return the same port from the same server
+    expect(firstPort).toBe(secondPort);
+
+    // Verify the server is actually listening on that port
+    const response = await fetch(`http://127.0.0.1:${firstPort}/`);
+    expect(response.status).toBe(200);
+  });
 });
