@@ -18,18 +18,24 @@ import {
 } from './tools/shape-tools.js';
 import { getBuildInfoHandler, exportSchematicHandler } from './tools/info-tools.js';
 
-const vec3Shape = { x: z.number().int(), y: z.number().int(), z: z.number().int() };
-const projectNameSchema = z
-  .string()
-  .regex(/^[A-Za-z0-9][A-Za-z0-9 _-]*$/, 'Project name may contain only letters, digits, spaces, hyphens and underscores.');
-const blockStateSchema = z.object({
-  id: z.string(),
-  properties: z.record(z.string()).optional()
-});
-const blockOrPaletteSchema = z.union([
-  blockStateSchema,
-  z.array(z.object({ block: blockStateSchema, weight: z.number().positive() }))
-]);
+// Factories, not shared instances: each call site gets its own zod schema
+// object so zod-to-json-schema inlines the generated JSON Schema instead of
+// emitting internal $ref pointers between tool input schemas.
+const vec3Shape = () => ({ x: z.number().int(), y: z.number().int(), z: z.number().int() });
+const projectNameSchema = () =>
+  z
+    .string()
+    .regex(/^[A-Za-z0-9][A-Za-z0-9 _-]*$/, 'Project name may contain only letters, digits, spaces, hyphens and underscores.');
+const blockStateSchema = () =>
+  z.object({
+    id: z.string(),
+    properties: z.record(z.string()).optional()
+  });
+const blockOrPaletteSchema = () =>
+  z.union([
+    blockStateSchema(),
+    z.array(z.object({ block: blockStateSchema(), weight: z.number().positive() }))
+  ]);
 
 export function createServer(): McpServer {
   const manager = new ProjectManager();
@@ -37,7 +43,7 @@ export function createServer(): McpServer {
 
   server.registerTool(
     'createProject',
-    { description: 'Create a new build project and make it active.', inputSchema: { name: projectNameSchema } },
+    { description: 'Create a new build project and make it active.', inputSchema: { name: projectNameSchema() } },
     async ({ name }) => createProjectHandler(manager, { name })
   );
 
@@ -63,7 +69,7 @@ export function createServer(): McpServer {
     'setBlock',
     {
       description: 'Set a single block in the active project.',
-      inputSchema: { pos: z.object(vec3Shape), block: blockStateSchema }
+      inputSchema: { pos: z.object(vec3Shape()), block: blockStateSchema() }
     },
     async (args) => setBlockHandler(manager, args)
   );
@@ -72,7 +78,7 @@ export function createServer(): McpServer {
     'setBlocks',
     {
       description: 'Set multiple blocks in the active project in one call.',
-      inputSchema: { blocks: z.array(z.object({ pos: z.object(vec3Shape), block: blockStateSchema })) }
+      inputSchema: { blocks: z.array(z.object({ pos: z.object(vec3Shape()), block: blockStateSchema() })) }
     },
     async (args) => setBlocksHandler(manager, args)
   );
@@ -81,7 +87,7 @@ export function createServer(): McpServer {
     'fillBox',
     {
       description: 'Fill a solid rectangular box.',
-      inputSchema: { from: z.object(vec3Shape), to: z.object(vec3Shape), block: blockOrPaletteSchema }
+      inputSchema: { from: z.object(vec3Shape()), to: z.object(vec3Shape()), block: blockOrPaletteSchema() }
     },
     async (args) => fillBoxHandler(manager, args)
   );
@@ -90,7 +96,7 @@ export function createServer(): McpServer {
     'outlineBox',
     {
       description: 'Build a hollow rectangular box (shell only).',
-      inputSchema: { from: z.object(vec3Shape), to: z.object(vec3Shape), block: blockOrPaletteSchema }
+      inputSchema: { from: z.object(vec3Shape()), to: z.object(vec3Shape()), block: blockOrPaletteSchema() }
     },
     async (args) => outlineBoxHandler(manager, args)
   );
@@ -100,10 +106,10 @@ export function createServer(): McpServer {
     {
       description: 'Build a vertical wall along the line between two points.',
       inputSchema: {
-        from: z.object(vec3Shape),
-        to: z.object(vec3Shape),
+        from: z.object(vec3Shape()),
+        to: z.object(vec3Shape()),
         height: z.number().int().positive(),
-        block: blockOrPaletteSchema
+        block: blockOrPaletteSchema()
       }
     },
     async (args) => wallHandler(manager, args)
@@ -113,7 +119,7 @@ export function createServer(): McpServer {
     'line',
     {
       description: 'Draw a straight line of blocks between two points.',
-      inputSchema: { from: z.object(vec3Shape), to: z.object(vec3Shape), block: blockOrPaletteSchema }
+      inputSchema: { from: z.object(vec3Shape()), to: z.object(vec3Shape()), block: blockOrPaletteSchema() }
     },
     async (args) => lineHandler(manager, args)
   );
@@ -123,9 +129,9 @@ export function createServer(): McpServer {
     {
       description: 'Build a sphere.',
       inputSchema: {
-        center: z.object(vec3Shape),
+        center: z.object(vec3Shape()),
         radius: z.number().nonnegative(),
-        block: blockOrPaletteSchema,
+        block: blockOrPaletteSchema(),
         hollow: z.boolean().optional()
       }
     },
@@ -137,10 +143,10 @@ export function createServer(): McpServer {
     {
       description: 'Build a cylinder.',
       inputSchema: {
-        center: z.object(vec3Shape),
+        center: z.object(vec3Shape()),
         radius: z.number().nonnegative(),
         height: z.number().int().positive(),
-        block: blockOrPaletteSchema,
+        block: blockOrPaletteSchema(),
         hollow: z.boolean().optional()
       }
     },
