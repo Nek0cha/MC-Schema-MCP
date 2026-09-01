@@ -102,4 +102,28 @@ describe('writeSchematic', () => {
     expect(schematic.get('Biomes')).toBeUndefined();
     expect(schematic.get('Entities')).toBeUndefined();
   });
+
+  it('auto-connects adjacent fences before writing them out', () => {
+    const project = new BuildProject('fence-connect-test');
+    project.setBlock({ x: 0, y: 0, z: 0 }, { id: 'minecraft:oak_fence' });
+    project.setBlock({ x: 1, y: 0, z: 0 }, { id: 'minecraft:oak_fence' });
+
+    const compressed = writeSchematic(project);
+    const raw = gunzipSync(compressed);
+    const { value } = decode(raw, { useMaps: true });
+    const schematic = loadSchematic(value as TagMap);
+
+    expect(schematic.getBlock({ x: 0, y: 0, z: 0 })?.properties).toEqual({
+      north: 'false',
+      south: 'false',
+      east: 'true',
+      west: 'false'
+    });
+    expect(schematic.getBlock({ x: 1, y: 0, z: 0 })?.properties).toEqual({
+      north: 'false',
+      south: 'false',
+      east: 'false',
+      west: 'true'
+    });
+  });
 });

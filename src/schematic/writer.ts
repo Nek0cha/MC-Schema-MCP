@@ -1,9 +1,10 @@
 import { encode, Int, Short } from '@enginehub/nbt-ts';
 import { gzipSync } from 'node:zlib';
-import type { BuildProject } from '../core/build-project.js';
-import { blockStateKey, type BlockState } from '../core/types.js';
+import { voxelKey, type BuildProject } from '../core/build-project.js';
+import { blockStateKey, type BlockState, type Vec3 } from '../core/types.js';
 import { encodeVarInt } from './varint.js';
 import { DATA_VERSION } from './data-version.js';
+import { resolveConnections } from './connections.js';
 
 const AIR: BlockState = { id: 'minecraft:air' };
 
@@ -39,6 +40,11 @@ export function writeSchematic(project: BuildProject): Buffer {
     );
   }
 
+  const resolvedBlocks = resolveConnections(project);
+  function blockAt(worldPos: Vec3): BlockState {
+    return resolvedBlocks.get(voxelKey(worldPos)) ?? AIR;
+  }
+
   const palette = new Map<string, number>();
   function paletteIdFor(block: BlockState): number {
     const key = blockStateKey(block);
@@ -57,7 +63,7 @@ export function writeSchematic(project: BuildProject): Buffer {
     for (let z = 0; z < length; z++) {
       for (let x = 0; x < width; x++) {
         const worldPos = { x: x + bbox.min.x, y: y + bbox.min.y, z: z + bbox.min.z };
-        const block = project.getBlock(worldPos) ?? AIR;
+        const block = blockAt(worldPos);
         dataBytes.push(...encodeVarInt(paletteIdFor(block)));
       }
     }

@@ -65,6 +65,8 @@ Claude Code の MCP サーバー設定に以下を追加してください（`cl
 
 `block` には単一の `BlockState`（`{ id: "minecraft:oak_stairs", properties?: { facing: "north" } }`）に加えて、`Palette`（`{ block: BlockState; weight: number }[]`、重み付きランダム配置）も指定できます。半径0〜1の`hollow`指定は、中を空洞にできるだけの厚みがないため無視されます（無音で何も置かれないのではなく、ソリッドとして配置されます）。
 
+フェンス・フェンスゲート・ガラス板・鉄格子・壁は、隣接ブロックとの接続を表す `north`/`south`/`east`/`west`（壁は `up` も）プロパティを手動で指定する必要はありません。`exportSchematic` 時に周囲のブロックを見て自動的に補完・上書きされます（`waterlogged` など接続に関係ないプロパティは温存されます）。
+
 ### 情報・出力
 
 | ツール | 引数 | 説明 |
