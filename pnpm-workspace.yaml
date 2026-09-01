@@ -1,2 +1,4 @@
+# esbuild's postinstall script needs to run (vitest depends on it) — modern
+# pnpm blocks build scripts by default, so this must stay explicit.
 allowBuilds:
   esbuild: true

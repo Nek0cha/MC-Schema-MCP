@@ -7,7 +7,8 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "test": "vitest run",
+    "typecheck:test": "tsc --noEmit -p tsconfig.test.json",
+    "test": "vitest run && pnpm run typecheck:test",
     "test:watch": "vitest"
   },
   "dependencies": {
