@@ -41,4 +41,20 @@ describe('ProjectManager', () => {
     expect(manager.listProjects()).toEqual([]);
     expect(() => manager.getActive()).toThrow();
   });
+
+  it('gets a project by name without changing the active project', () => {
+    const manager = new ProjectManager();
+    manager.createProject('house');
+    manager.createProject('tower'); // 'tower' is now active
+
+    const house = manager.getProject('house');
+
+    expect(house?.name).toBe('house');
+    expect(manager.getActive().name).toBe('tower');
+  });
+
+  it('returns undefined when getting a project that does not exist', () => {
+    const manager = new ProjectManager();
+    expect(manager.getProject('missing')).toBeUndefined();
+  });
 });

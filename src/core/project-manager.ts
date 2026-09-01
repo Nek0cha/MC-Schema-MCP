@@ -47,4 +47,8 @@ export class ProjectManager {
     }
     return project;
   }
+
+  getProject(name: string): BuildProject | undefined {
+    return this.projects.get(name);
+  }
 }
