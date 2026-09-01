@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { parseVoxelKey, type BuildProject } from '../core/build-project.js';
 import type { ProjectManager } from '../core/project-manager.js';
 import { buildViewerHtml } from './viewer-html.js';
 
@@ -60,7 +61,48 @@ export class PreviewServer {
       return;
     }
 
+    if (url.pathname === '/api/build') {
+      this.handleApiBuild(url, res);
+      return;
+    }
+
     res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
     res.end('Not Found');
+  }
+
+  private handleApiBuild(url: URL, res: ServerResponse): void {
+    const projectName = url.searchParams.get('project');
+    const project = projectName ? this.manager.getProject(projectName) : this.getActiveOrUndefined();
+
+    if (!project) {
+      res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(
+        JSON.stringify({
+          error: projectName ? `Project "${projectName}" does not exist.` : 'No active project.'
+        })
+      );
+      return;
+    }
+
+    const blocks = [...project.voxels].map(([key, block]) => {
+      const pos = parseVoxelKey(key);
+      return { x: pos.x, y: pos.y, z: pos.z, id: block.id };
+    });
+
+    const body = JSON.stringify({
+      project: project.name,
+      bounds: project.getBoundingBox(),
+      blocks
+    });
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(body);
+  }
+
+  private getActiveOrUndefined(): BuildProject | undefined {
+    try {
+      return this.manager.getActive();
+    } catch {
+      return undefined;
+    }
   }
 }
