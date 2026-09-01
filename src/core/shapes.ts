@@ -111,7 +111,10 @@ export function sphere(
   }
   const r = Math.round(radius);
   const rSquared = r * r;
-  const innerSquared = hollow ? (r - 1) * (r - 1) : -1;
+  // Below radius 2 there's no interior layer to hollow out (r-1 would be
+  // 0 or negative), so hollow degrades to solid rather than silently
+  // placing nothing.
+  const innerSquared = hollow && r >= 2 ? (r - 1) * (r - 1) : -1;
 
   for (let x = -r; x <= r; x++) {
     for (let y = -r; y <= r; y++) {
@@ -144,7 +147,10 @@ export function cylinder(
   }
   const r = Math.round(radius);
   const rSquared = r * r;
-  const innerSquared = hollow ? (r - 1) * (r - 1) : -1;
+  // Below radius 2 there's no interior layer to hollow out (r-1 would be
+  // 0 or negative), so hollow degrades to solid rather than silently
+  // placing nothing.
+  const innerSquared = hollow && r >= 2 ? (r - 1) * (r - 1) : -1;
 
   for (let dy = 0; dy < height; dy++) {
     for (let x = -r; x <= r; x++) {

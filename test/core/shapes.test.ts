@@ -83,6 +83,13 @@ describe('sphere', () => {
     const project = new BuildProject('demo');
     expect(() => sphere(project, { x: 0, y: 0, z: 0 }, -1, STONE)).toThrow();
   });
+
+  it('falls back to a solid single block for hollow radius 0 (no interior to hollow out)', () => {
+    const project = new BuildProject('demo');
+    sphere(project, { x: 5, y: 5, z: 5 }, 0, STONE, true);
+    expect(project.getBlockCounts()).toEqual({ 'minecraft:stone': 1 });
+    expect(project.getBlock({ x: 5, y: 5, z: 5 })).toEqual(STONE);
+  });
 });
 
 describe('cylinder', () => {
@@ -100,5 +107,13 @@ describe('cylinder', () => {
   it('rejects a non-positive height', () => {
     const project = new BuildProject('demo');
     expect(() => cylinder(project, { x: 0, y: 0, z: 0 }, 1, 0, STONE)).toThrow();
+  });
+
+  it('falls back to a solid single-cell column for hollow radius 0 (no interior to hollow out)', () => {
+    const project = new BuildProject('demo');
+    cylinder(project, { x: 0, y: 0, z: 0 }, 0, 2, STONE, true);
+    expect(project.getBlockCounts()).toEqual({ 'minecraft:stone': 2 });
+    expect(project.getBlock({ x: 0, y: 0, z: 0 })).toEqual(STONE);
+    expect(project.getBlock({ x: 0, y: 1, z: 0 })).toEqual(STONE);
   });
 });
