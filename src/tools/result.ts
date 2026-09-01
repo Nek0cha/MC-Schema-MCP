@@ -1,4 +1,5 @@
 export interface ToolTextResult {
+  [x: string]: unknown;
   content: { type: 'text'; text: string }[];
 }
 
