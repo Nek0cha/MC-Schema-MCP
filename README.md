@@ -73,7 +73,10 @@ Claude Code の MCP サーバー設定に以下を追加してください（`cl
 |---|---|---|
 | `getBuildInfo` | - | アクティブプロジェクトのサイズ・バウンディングボックス・ブロック数集計を返す |
 | `exportSchematic` | - | アクティブプロジェクトを `./output/<projectName>.schem` に書き出し、書き出し先の絶対パスを返す |
-| `previewBuild` | - | アクティブプロジェクトを2Dレイヤービューアで確認できるローカルサーバーを起動し、URLを返す |
+| `previewBuild` | - | アクティブプロジェクトをテクスチャ付きの3Dビューアで確認できるローカルサーバーを起動し、URLを返す（従来の2Dレイヤー表示は `/2d`） |
+| `renderView` | `view?, focus?: { from, to }, clipY?, width?, height?, ortho?, project?` | 3Dビューアをヘッドレスの Edge/Chrome で撮影し、PNG 画像で返す（AI が自分の建築物を確認するためのツール） |
+
+3Dビューアは本家のブロックモデルとテクスチャで描きます。初回に client.jar（`MC_SCHEMA_ASSET_VERSION`、既定 `1.21.11`）をダウンロードして `MC_SCHEMA_CACHE_DIR`（既定 `./cache`）に必要な部分だけを展開します（再配布はしません）。オフラインなどで取得できないときは、ブロックごとの色で描きます。`renderView` には Microsoft Edge か Google Chrome が必要です。
 
 **エクスポートの上限:** 1軸あたり32767ブロック、合計1,600万セル（バウンディングボックスの体積、疎に配置していても密なフォーマットとして書き出すため）。超えると `exportSchematic` はエラーを返します。
 
@@ -81,7 +84,8 @@ Claude Code の MCP サーバー設定に以下を追加してください（`cl
 
 ```bash
 pnpm test    # vitest + テストファイルの型チェック
-pnpm build   # tsc
+pnpm build   # tsc（サーバー用とブラウザ用）
+pnpm test:e2e # 実際の Edge/Chrome での renderView の結合テスト（手動）
 pnpm start   # ビルド済みサーバーを stdio で起動
 ```
 

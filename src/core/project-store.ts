@@ -42,7 +42,7 @@ export function listStoredProjects(root: string): string[] {
   return names;
 }
 
-function writeAtomic(dest: string, data: string | Buffer): void {
+export function writeAtomic(dest: string, data: string | Buffer): void {
   const tmp = `${dest}.tmp`;
   writeFileSync(tmp, data);
   renameSync(tmp, dest);

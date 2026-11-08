@@ -1,49 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { z } from 'zod';
 import { ProjectManager } from './core/project-manager.js';
-import {
-  createProjectHandler,
-  listProjectsHandler,
-  switchProjectHandler,
-  deleteProjectHandler
-} from './tools/project-tools.js';
-import { setBlockHandler, setBlocksHandler } from './tools/block-tools.js';
-import {
-  fillBoxHandler,
-  outlineBoxHandler,
-  wallHandler,
-  lineHandler,
-  sphereHandler,
-  cylinderHandler
-} from './tools/shape-tools.js';
-import { getBuildInfoHandler, exportSchematicHandler } from './tools/info-tools.js';
-import { previewBuildHandler, createPreviewServerState } from './tools/preview-tools.js';
+import { createPreviewServerState } from './tools/preview-tools.js';
+import { buildToolDefs, type ToolContext } from './tools/registry.js';
 import type { ToolTextResult } from './tools/result.js';
-
-// Factories, not shared instances: each call site gets its own zod schema
-// object so zod-to-json-schema inlines the generated JSON Schema instead of
-// emitting internal $ref pointers between tool input schemas.
-const vec3Shape = () => ({ x: z.number().int(), y: z.number().int(), z: z.number().int() });
-const projectNameSchema = () =>
-  z
-    .string()
-    .regex(/^[A-Za-z0-9][A-Za-z0-9 _-]*$/, 'Project name may contain only letters, digits, spaces, hyphens and underscores.')
-    // Names become directory names: Windows strips trailing spaces and reserves device names.
-    .refine((name) => !name.endsWith(' '), 'Project name must not end with a space.')
-    .refine(
-      (name) => !/^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(name),
-      'Project name must not be a reserved Windows device name (CON, PRN, AUX, NUL, COM1-9, LPT1-9).'
-    );
-const blockStateSchema = () =>
-  z.object({
-    id: z.string(),
-    properties: z.record(z.string()).optional()
-  });
-const blockOrPaletteSchema = () =>
-  z.union([
-    blockStateSchema(),
-    z.array(z.object({ block: blockStateSchema(), weight: z.number().positive() }))
-  ]);
 
 /**
  * Runs a mutating tool handler, then persists the active project. If saving
@@ -82,153 +41,40 @@ export function withSave(manager: ProjectManager, run: () => ToolTextResult): To
 export interface CreateServerOptions {
   /** Root directory for project persistence. Omit to keep projects in memory only. */
   dataDir?: string;
+  /** Directory for saved templates. Defaults to ./templates. */
+  templateDir?: string;
 }
 
 export function createServer(options: CreateServerOptions = {}): McpServer {
   const manager = new ProjectManager({ dataDir: options.dataDir });
-  const previewState = createPreviewServerState();
+  const ctx: ToolContext = {
+    manager,
+    templateDir: options.templateDir ?? './templates',
+    previewState: createPreviewServerState()
+  };
   const server = new McpServer({ name: 'mc-schema-mcp', version: '0.1.0' });
 
-  server.registerTool(
-    'createProject',
-    { description: 'Create a new build project and make it active.', inputSchema: { name: projectNameSchema() } },
-    async ({ name }) => createProjectHandler(manager, { name })
-  );
-
-  server.registerTool(
-    'listProjects',
-    { description: 'List all build project names.', inputSchema: {} },
-    async () => listProjectsHandler(manager)
-  );
-
-  server.registerTool(
-    'switchProject',
-    { description: 'Switch the active build project.', inputSchema: { name: z.string() } },
-    async ({ name }) => switchProjectHandler(manager, { name })
-  );
-
-  server.registerTool(
-    'deleteProject',
-    { description: 'Delete a build project.', inputSchema: { name: z.string() } },
-    async ({ name }) => deleteProjectHandler(manager, { name })
-  );
-
-  server.registerTool(
-    'setBlock',
-    {
-      description: 'Set a single block in the active project.',
-      inputSchema: { pos: z.object(vec3Shape()), block: blockStateSchema() }
-    },
-    async (args) => withSave(manager, () => setBlockHandler(manager, args))
-  );
-
-  server.registerTool(
-    'setBlocks',
-    {
-      description: 'Set multiple blocks in the active project in one call.',
-      inputSchema: { blocks: z.array(z.object({ pos: z.object(vec3Shape()), block: blockStateSchema() })) }
-    },
-    async (args) => withSave(manager, () => setBlocksHandler(manager, args))
-  );
-
-  server.registerTool(
-    'fillBox',
-    {
-      description: 'Fill a solid rectangular box.',
-      inputSchema: { from: z.object(vec3Shape()), to: z.object(vec3Shape()), block: blockOrPaletteSchema() }
-    },
-    async (args) => withSave(manager, () => fillBoxHandler(manager, args))
-  );
-
-  server.registerTool(
-    'outlineBox',
-    {
-      description: 'Build a hollow rectangular box (shell only).',
-      inputSchema: { from: z.object(vec3Shape()), to: z.object(vec3Shape()), block: blockOrPaletteSchema() }
-    },
-    async (args) => withSave(manager, () => outlineBoxHandler(manager, args))
-  );
-
-  server.registerTool(
-    'wall',
-    {
-      description: 'Build a vertical wall along the line between two points.',
-      inputSchema: {
-        from: z.object(vec3Shape()),
-        to: z.object(vec3Shape()),
-        height: z.number().int().positive(),
-        block: blockOrPaletteSchema()
+  for (const def of buildToolDefs()) {
+    server.registerTool(
+      def.name,
+      { description: def.description, inputSchema: def.inputShape() },
+      async (args: unknown) => {
+        if (!def.mutating) return def.run(ctx, args);
+        return withSave(manager, () => {
+          const result = def.run(ctx, args);
+          if (result instanceof Promise) {
+            throw new Error(`Tool ${def.name} is marked mutating but returned an asynchronous result.`);
+          }
+          return result as ToolTextResult;
+        });
       }
-    },
-    async (args) => withSave(manager, () => wallHandler(manager, args))
-  );
+    );
+  }
 
-  server.registerTool(
-    'line',
-    {
-      description: 'Draw a straight line of blocks between two points.',
-      inputSchema: { from: z.object(vec3Shape()), to: z.object(vec3Shape()), block: blockOrPaletteSchema() }
-    },
-    async (args) => withSave(manager, () => lineHandler(manager, args))
-  );
-
-  server.registerTool(
-    'sphere',
-    {
-      description: 'Build a sphere.',
-      inputSchema: {
-        center: z.object(vec3Shape()),
-        radius: z.number().nonnegative(),
-        block: blockOrPaletteSchema(),
-        hollow: z.boolean().optional()
-      }
-    },
-    async (args) => withSave(manager, () => sphereHandler(manager, args))
-  );
-
-  server.registerTool(
-    'cylinder',
-    {
-      description: 'Build a cylinder.',
-      inputSchema: {
-        center: z.object(vec3Shape()),
-        radius: z.number().nonnegative(),
-        height: z.number().int().positive(),
-        block: blockOrPaletteSchema(),
-        hollow: z.boolean().optional()
-      }
-    },
-    async (args) => withSave(manager, () => cylinderHandler(manager, args))
-  );
-
-  server.registerTool(
-    'getBuildInfo',
-    { description: 'Get a summary of the active project (size, bounding box, block counts).', inputSchema: {} },
-    async () => getBuildInfoHandler(manager)
-  );
-
-  server.registerTool(
-    'exportSchematic',
-    {
-      description:
-        'Export the active project to ./output/<projectName>.schem and return the absolute path. ' +
-        'Project names may contain only letters, digits, spaces, hyphens and underscores.',
-      inputSchema: {}
-    },
-    async () => exportSchematicHandler(manager)
-  );
-
-  server.registerTool(
-    'previewBuild',
-    {
-      description:
-        'Start (or reuse) a local preview server for the active project and return its URL. ' +
-        'Open the URL in a browser to see a layer-by-layer 2D view: switch Y layers, hover a ' +
-        'cell for its coordinates and block id, click a cell to copy "x, y, z" to the clipboard.',
-      inputSchema: {}
-    },
-    async () => previewBuildHandler(manager, previewState)
-  );
+  // Shut the shared headless browser down together with the MCP session.
+  server.server.onclose = () => {
+    void ctx.previewState.renderer.close();
+  };
 
   return server;
 }

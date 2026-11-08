@@ -1,10 +1,17 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
+import type { BuildProject } from '../core/build-project.js';
 import type { ProjectManager } from '../core/project-manager.js';
+import { findIsolatedConnectables, formatIsolatedWarning } from '../schematic/connections.js';
 import { writeSchematic } from '../schematic/writer.js';
 import { textResult, type ToolTextResult } from './result.js';
 
 const OUTPUT_DIR = './output';
+
+function isolatedWarningSuffix(project: BuildProject): string {
+  const warning = formatIsolatedWarning(findIsolatedConnectables(project));
+  return warning ? ` ${warning}` : '';
+}
 
 export function getBuildInfoHandler(manager: ProjectManager): ToolTextResult {
   const project = manager.getActive();
@@ -24,7 +31,8 @@ export function getBuildInfoHandler(manager: ProjectManager): ToolTextResult {
   return textResult(
     `Project "${project.name}": ${width}x${height}x${length} blocks. ` +
       `Bounding box min=(${bbox.min.x},${bbox.min.y},${bbox.min.z}) ` +
-      `max=(${bbox.max.x},${bbox.max.y},${bbox.max.z}). Block counts: ${countsText}.`
+      `max=(${bbox.max.x},${bbox.max.y},${bbox.max.z}). Block counts: ${countsText}.` +
+      isolatedWarningSuffix(project)
   );
 }
 
@@ -34,5 +42,5 @@ export function exportSchematicHandler(manager: ProjectManager): ToolTextResult 
   mkdirSync(OUTPUT_DIR, { recursive: true });
   const outputPath = join(OUTPUT_DIR, `${basename(project.name)}.schem`);
   writeFileSync(outputPath, buffer);
-  return textResult(`Exported to ${resolve(outputPath)}`);
+  return textResult(`Exported to ${resolve(outputPath)}` + isolatedWarningSuffix(project));
 }

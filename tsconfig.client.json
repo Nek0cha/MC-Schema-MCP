@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": []
+  },
+  "include": ["src/preview/client", "src/preview/chunk-codec.ts", "src/preview/models/types.ts"],
+  "exclude": []
+}

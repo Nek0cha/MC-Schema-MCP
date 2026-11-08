@@ -3,3 +3,5 @@ dist/
 output/
 projects/
 *.log
+templates/
+cache/

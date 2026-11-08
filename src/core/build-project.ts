@@ -42,6 +42,9 @@ export class BuildProject {
   private readonly paletteIndex = new Map<string, number>();
   private readonly paletteCounts: number[] = [0];
   private total = 0;
+  private rev = 0;
+  private readonly chunkRevisions = new Map<string, number>();
+  private readonly removedRevisions = new Map<string, number>();
   private bboxCache: BoundingBox | null | undefined;
 
   // Hot-path caches for consecutive writes.
@@ -91,6 +94,8 @@ export class BuildProject {
     chunk[idx] = paletteId;
     this.bboxCache = undefined;
     this.dirty.add(key);
+    this.chunkRevisions.set(key, ++this.rev);
+    this.removedRevisions.delete(key);
     if (old === 0) {
       this.chunkCounts.set(key, (this.chunkCounts.get(key) as number) + 1);
       this.total++;
@@ -125,15 +130,36 @@ export class BuildProject {
     this.total--;
     this.bboxCache = undefined;
     this.dirty.add(key);
+    const revision = ++this.rev;
     const remaining = (this.chunkCounts.get(key) as number) - 1;
     if (remaining === 0) {
       this.chunks.delete(key);
       this.chunkCounts.delete(key);
+      this.chunkRevisions.delete(key);
+      this.removedRevisions.set(key, revision);
       this.lastChunk = null;
       this.lastKey = null;
     } else {
       this.chunkCounts.set(key, remaining);
+      this.chunkRevisions.set(key, revision);
     }
+  }
+
+  /** Monotonic counter, bumped on every real cell change. Memory only; never persisted. */
+  get revision(): number {
+    return this.rev;
+  }
+
+  /** Chunks last changed after `since`; chunks that became empty and were dropped are flagged removed. */
+  getChunkRevisionsSince(since: number): { key: string; revision: number; removed: boolean }[] {
+    const out: { key: string; revision: number; removed: boolean }[] = [];
+    for (const [key, revision] of this.chunkRevisions) {
+      if (revision > since) out.push({ key, revision, removed: false });
+    }
+    for (const [key, revision] of this.removedRevisions) {
+      if (revision > since) out.push({ key, revision, removed: true });
+    }
+    return out;
   }
 
   forEachBlock(cb: (pos: Vec3, block: Readonly<BlockState>) => void): void {
@@ -246,7 +272,9 @@ export class BuildProject {
       project.chunks.set(key, chunk);
       project.chunkCounts.set(key, count);
       project.total += count;
+      project.chunkRevisions.set(key, 1);
     }
+    project.rev = 1;
     return project;
   }
 
