@@ -13,6 +13,11 @@ const NEIGHBOR_OFFSETS: Record<Direction, Vec3> = {
   east: { x: 1, y: 0, z: 0 }
 };
 
+/** Whether the block id is a fence, pane, bars or wall, i.e. something resolveConnectionAt can change. */
+export function isConnectableId(id: string): boolean {
+  return isFenceFamily(id) || isPaneFamily(id) || isWallFamily(id);
+}
+
 function isFenceFamily(id: string): boolean {
   return id.endsWith('_fence');
 }

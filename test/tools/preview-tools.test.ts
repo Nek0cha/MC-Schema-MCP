@@ -1,10 +1,25 @@
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { AssetStore } from '../../src/preview/assets/asset-store.js';
 import { ProjectManager } from '../../src/core/project-manager.js';
 import {
   createPreviewServerState,
   previewBuildHandler,
   type PreviewServerState
 } from '../../src/tools/preview-tools.js';
+
+/** Never downloads anything. */
+function offlineState(): PreviewServerState {
+  return createPreviewServerState(
+    new AssetStore({
+      cacheDir: mkdtempSync(join(tmpdir(), 'mc-assets-')),
+      version: 'test',
+      fetchImpl: () => Promise.reject(new Error('offline'))
+    })
+  );
+}
 
 describe('previewBuildHandler', () => {
   let state: PreviewServerState | null = null;
@@ -18,7 +33,7 @@ describe('previewBuildHandler', () => {
 
   it('throws when there is no active project, matching other tools', async () => {
     const manager = new ProjectManager();
-    state = createPreviewServerState();
+    state = offlineState();
 
     await expect(previewBuildHandler(manager, state)).rejects.toThrow();
   });
@@ -26,7 +41,7 @@ describe('previewBuildHandler', () => {
   it('starts a server and returns its URL', async () => {
     const manager = new ProjectManager();
     manager.createProject('house');
-    state = createPreviewServerState();
+    state = offlineState();
 
     const result = await previewBuildHandler(manager, state);
 
@@ -36,7 +51,7 @@ describe('previewBuildHandler', () => {
   it('reuses the same server (and port) on a second call', async () => {
     const manager = new ProjectManager();
     manager.createProject('house');
-    state = createPreviewServerState();
+    state = offlineState();
 
     const first = await previewBuildHandler(manager, state);
     const second = await previewBuildHandler(manager, state);
