@@ -18,7 +18,7 @@ describe('PreviewServer', () => {
     }
   });
 
-  it('starts and serves an HTML page at /', async () => {
+  it('starts and serves the 3D viewer page at /', async () => {
     const manager = new ProjectManager();
     server = new PreviewServer(manager);
     const port = await server.ensureStarted();
@@ -29,7 +29,7 @@ describe('PreviewServer', () => {
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toContain('text/html');
     expect(body).toContain('<title>');
-    expect(body).toContain('/api/build');
+    expect(body).toContain('/client/viewer.js');
   });
 
   it('reuses the same port on a second ensureStarted call', async () => {

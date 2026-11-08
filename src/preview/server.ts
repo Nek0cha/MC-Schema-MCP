@@ -13,6 +13,7 @@ import { encodeChunks, type ChunkRecord } from './chunk-codec.js';
 import { DisplayPalette } from './display-palette.js';
 import type { ModelSource } from './models/types.js';
 import { buildViewerHtml } from './viewer-html.js';
+import { buildViewer3dHtml } from './viewer3d-html.js';
 
 export interface PreviewServerOptions {
   /** Shared asset store. Defaults to one built from MC_SCHEMA_ASSET_VERSION / MC_SCHEMA_CACHE_DIR. */
@@ -168,8 +169,8 @@ export class PreviewServer {
     const path = url.pathname;
 
     if (path === '/' || path === '/2d') {
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(buildViewerHtml());
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(path === '/' ? buildViewer3dHtml() : buildViewerHtml());
       return;
     }
 
@@ -198,6 +199,11 @@ export class PreviewServer {
     }
     if (path.startsWith(vendorAddons)) {
       void this.serveFile(res, safeJoin(join(threeRoot(), 'examples', 'jsm'), path.slice(vendorAddons.length)));
+      return;
+    }
+    if (path === '/chunk-codec.js') {
+      // The compiled viewer imports ../chunk-codec.js, which lives next to the client folder.
+      void this.serveFile(res, join(this.clientDir, '..', 'chunk-codec.js'));
       return;
     }
     if (path.startsWith('/client/')) {
