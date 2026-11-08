@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import { parseVoxelKey, type BuildProject } from '../core/build-project.js';
+import type { BuildProject } from '../core/build-project.js';
 import type { ProjectManager } from '../core/project-manager.js';
 import { buildViewerHtml } from './viewer-html.js';
 
@@ -111,9 +111,9 @@ export class PreviewServer {
       return;
     }
 
-    const blocks = [...project.voxels].map(([key, block]) => {
-      const pos = parseVoxelKey(key);
-      return { x: pos.x, y: pos.y, z: pos.z, id: block.id };
+    const blocks: { x: number; y: number; z: number; id: string }[] = [];
+    project.forEachBlock((pos, block) => {
+      blocks.push({ x: pos.x, y: pos.y, z: pos.z, id: block.id });
     });
 
     const body = JSON.stringify({
