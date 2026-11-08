@@ -253,6 +253,32 @@ describe('PreviewServer 3D API', () => {
     expect(typeof data.paletteVersion).toBe('number');
   });
 
+  it('serves the map settings and markers from /api/markers', async () => {
+    const manager = new ProjectManager();
+    const p = manager.createProject('demo');
+    p.mapSettings = { id: 'town', name: 'Town', size: [64, 32, 64], targetVersion: '1.21.1', includeAir: true };
+    p.addMarkers([
+      { kind: 'player_spawn', pos: [1, 2, 3], facing: 90 },
+      { kind: 'loot', pos: [4, 2, 4], type: 'crate', tier: 2 }
+    ]);
+    const port = await start(manager);
+    const data = await (await fetch(`http://127.0.0.1:${port}/api/markers`)).json();
+    expect(data.map).toMatchObject({ id: 'town', size: [64, 32, 64] });
+    expect(data.markers).toEqual([
+      { kind: 'player_spawn', pos: [1, 2, 3], facing: 90, markerId: 'm1' },
+      { kind: 'loot', pos: [4, 2, 4], type: 'crate', tier: 2, markerId: 'm2' }
+    ]);
+  });
+
+  it('serves empty markers and a null map for a plain project, and 404 for an unknown project', async () => {
+    const manager = new ProjectManager();
+    manager.createProject('demo');
+    const port = await start(manager);
+    const data = await (await fetch(`http://127.0.0.1:${port}/api/markers`)).json();
+    expect(data).toEqual({ map: null, markers: [] });
+    expect((await fetch(`http://127.0.0.1:${port}/api/markers?project=nope`)).status).toBe(404);
+  });
+
   it('returns 404 for status of an unknown project', async () => {
     const port = await start(new ProjectManager());
     expect((await fetch(`http://127.0.0.1:${port}/api/status?project=nope`)).status).toBe(404);

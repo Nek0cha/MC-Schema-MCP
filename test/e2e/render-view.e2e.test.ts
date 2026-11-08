@@ -144,6 +144,30 @@ describe('renderView (real browser)', () => {
     if (process.env.MC_SCHEMA_E2E_OUT) writeFileSync(`${process.env.MC_SCHEMA_E2E_OUT}/e2e-small.png`, png);
   });
 
+  it('draws raid map markers unless markers is false', async () => {
+    const p = manager.createProject('raid');
+    p.mapSettings = { id: 'r', name: 'R', size: [16, 8, 16], targetVersion: '1.21.1', includeAir: true };
+    for (let x = 0; x < 16; x++) for (let z = 0; z < 16; z++) p.setBlock({ x, y: 0, z }, { id: 'minecraft:stone' });
+    p.addMarkers([
+      { kind: 'extract', id: 'gate', pos: [8, 1, 8], radius: 4 },
+      { kind: 'player_spawn', pos: [3, 1, 3], facing: 0 }
+    ]);
+    const countMarkerPixels = (png: Buffer) => {
+      const { rgba } = decodePng(png);
+      let n = 0;
+      for (let i = 0; i < rgba.length; i += 4) {
+        const [r, g, b] = [rgba[i], rgba[i + 1], rgba[i + 2]];
+        // Cyan (extract) or green (player spawn); the stone and the sky are neither.
+        if ((r < 60 && g > 150 && b > 200) || (r < 80 && g > 150 && b < 90)) n++;
+      }
+      return n;
+    };
+    const on = await renderViewHandler(manager, state, { view: 'top', width: 400, height: 300, project: 'raid' });
+    const off = await renderViewHandler(manager, state, { view: 'top', width: 400, height: 300, project: 'raid', markers: false });
+    expect(countMarkerPixels(imageOf(on))).toBeGreaterThan(30);
+    expect(countMarkerPixels(imageOf(off))).toBe(0);
+  });
+
   it('renders a 500x80x500 city from iso_se within 60 seconds', async () => {
     const p = manager.createProject('city');
     const rand = lcg(12345);

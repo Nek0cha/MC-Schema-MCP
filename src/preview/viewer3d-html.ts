@@ -1,6 +1,6 @@
 /**
  * The 3D viewer page. It is static: the module script at /client/viewer.js reads
- * the URL parameters (project, view, clipY, focus, margin, ui, ortho) itself.
+ * the URL parameters (project, view, clipY, focus, margin, ui, ortho, markers) itself.
  * three.js is resolved through the import map from /vendor/three/.
  */
 export function buildViewer3dHtml(): string {
@@ -39,6 +39,7 @@ export function buildViewer3dHtml(): string {
     <span class="muted">rev <span id="revision">0</span></span>
     <span id="assets" class="muted"></span>
     <span id="presets"></span>
+    <label class="muted"><input id="markersToggle" type="checkbox" checked> Markers</label>
     <button id="ortho" title="Orthographic projection (top view)">Ortho</button>
     <label class="muted">Cut above Y: <input id="clip" type="range" min="0" max="0" value="0"> <span id="clipLabel">off</span></label>
     <a class="btn" id="link2d" href="/2d">2D layers</a>

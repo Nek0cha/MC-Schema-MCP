@@ -73,6 +73,8 @@ export interface RenderViewArgs {
   width?: number;
   height?: number;
   ortho?: boolean;
+  /** Draw the raid map markers (default true). */
+  markers?: boolean;
   project?: string;
 }
 
@@ -134,6 +136,7 @@ export async function renderViewHandler(
   }
   if (args.clipY !== undefined) query.set('clipY', String(args.clipY));
   if (args.ortho) query.set('ortho', '1');
+  if (args.markers === false) query.set('markers', '0');
 
   const size = {
     width: clampSize(args.width, DEFAULT_WIDTH, MAX_WIDTH),

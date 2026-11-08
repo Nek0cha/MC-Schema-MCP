@@ -207,6 +207,10 @@ export class PreviewServer {
       this.handleApiStatus(url, res);
       return;
     }
+    if (path === '/api/markers') {
+      this.handleApiMarkers(url, res);
+      return;
+    }
     if (path === '/api/palette') {
       this.handleApiPalette(url, res);
       return;
@@ -317,6 +321,12 @@ export class PreviewServer {
       paletteVersion: palette.version,
       assets: { state: this.assetStore.state, version: this.assetStore.version, error: this.assetStore.error }
     });
+  }
+
+  private handleApiMarkers(url: URL, res: ServerResponse): void {
+    const project = this.projectFor(url, res);
+    if (!project) return;
+    this.json(res, { map: project.mapSettings, markers: project.getMarkers() });
   }
 
   private handleApiPalette(url: URL, res: ServerResponse): void {

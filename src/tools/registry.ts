@@ -532,6 +532,7 @@ export function buildToolDefs(): ToolDef[] {
         width: z.number().int().min(64).max(1920).optional().describe('Default 1280.'),
         height: z.number().int().min(64).max(1200).optional().describe('Default 800.'),
         ortho: z.boolean().optional().describe('Orthographic projection; only used with view "top".'),
+        markers: z.boolean().optional().describe('Draw the raid map markers (spawns, extracts, loot, routes). Default true.'),
         project: projectNameSchema().optional().describe('Default: the active project.')
       }),
       mutating: false,
