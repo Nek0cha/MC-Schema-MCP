@@ -18,6 +18,12 @@ import {
   replaceInRegionHandler,
   stackRegionHandler
 } from './region-tools.js';
+import {
+  addMarkersHandler,
+  listMarkersHandler,
+  removeMarkersHandler,
+  setMapSettingsHandler
+} from './raid-tools.js';
 import type { ToolResult } from './result.js';
 import {
   fillBoxHandler,
@@ -106,6 +112,42 @@ const keepPropertiesSchema = () =>
     .describe(
       'Carry over the old block\'s properties (facing, half, ...). Default "auto": only when both ids end with the same word (oak_stairs -> spruce_stairs).'
     );
+const posSchema = () => z.tuple([z.number().int(), z.number().int(), z.number().int()]);
+const tierSchema = () => z.number().int().min(1).max(3).describe('Tier 1-3.');
+const MARKER_KINDS = ['player_spawn', 'extract', 'loot', 'enemy_spawn', 'patrol_route'] as const;
+const markerSchema = () =>
+  z.discriminatedUnion('kind', [
+    z.object({
+      kind: z.literal('player_spawn'),
+      pos: posSchema().describe('The cell the feet occupy.'),
+      facing: z.number().describe('Minecraft yaw: 0 = south, 90 = west, 180 = north, 270 = east.')
+    }),
+    z.object({
+      kind: z.literal('extract'),
+      id: z.string().min(1).describe('Unique among extract markers.'),
+      pos: posSchema(),
+      radius: z.number().positive().default(4)
+    }),
+    z.object({
+      kind: z.literal('loot'),
+      pos: posSchema().describe('The cell the crate goes in; keep it air or a barrel.'),
+      type: z.enum(['crate', 'safe', 'weapon_case', 'medical']),
+      tier: tierSchema()
+    }),
+    z.object({
+      kind: z.literal('enemy_spawn'),
+      pos: posSchema(),
+      squadSize: z
+        .tuple([z.number().int().min(1), z.number().int().min(1)])
+        .refine(([min, max]) => min <= max, 'squadSize must be [min, max] with min <= max.'),
+      tier: tierSchema()
+    }),
+    z.object({
+      kind: z.literal('patrol_route'),
+      id: z.string().min(1).describe('Unique among patrol routes.'),
+      points: z.array(posSchema()).min(2)
+    })
+  ]);
 const seedSchema = () =>
   z.number().int().optional().describe('Makes random choices reproducible. Omit for a different result each time.');
 
@@ -372,6 +414,50 @@ export function buildToolDefs(): ToolDef[] {
       run: ({ manager, templateDir }, args) => placeTemplateHandler(manager, templateDir, args)
     },
     {
+      name: 'setMapSettings',
+      description:
+        'Turn the active project into a raid map: id (also the output folder name), display name, size [x, y, z] ' +
+        '(the map covers (0,0,0)..size-1 in project coordinates), targetVersion (default "1.21.1") and ' +
+        'includeAir (default true: unset cells are written as air in the tiles).',
+      inputShape: () => ({
+        id: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/, 'Map id may contain only letters, digits, hyphens and underscores.'),
+        name: z.string().min(1),
+        size: z.tuple([z.number().int().min(1), z.number().int().min(1), z.number().int().min(1)]),
+        targetVersion: z.enum(['1.21.1', '1.21.11']).optional(),
+        includeAir: z.boolean().optional()
+      }),
+      mutating: true,
+      batchable: false,
+      run: ({ manager }, args) => setMapSettingsHandler(manager, args)
+    },
+    {
+      name: 'addMarkers',
+      description:
+        'Add raid map markers: player_spawn, extract, loot, enemy_spawn, patrol_route. `pos` is the cell the feet ' +
+        'occupy (for loot: the cell the crate goes in). extract and patrol_route ids must be unique. If any marker ' +
+        'is invalid none is added. Returns the internal ids (m1, m2, ...) to use with removeMarkers.',
+      inputShape: () => ({ markers: z.array(markerSchema()).min(1) }),
+      mutating: true,
+      batchable: true,
+      run: ({ manager }, args) => addMarkersHandler(manager, args)
+    },
+    {
+      name: 'listMarkers',
+      description: 'List the markers of the active project grouped by kind, with their internal ids.',
+      inputShape: () => ({ kind: z.enum(MARKER_KINDS).optional() }),
+      mutating: false,
+      batchable: false,
+      run: ({ manager }, args) => listMarkersHandler(manager, args)
+    },
+    {
+      name: 'removeMarkers',
+      description: 'Remove markers by internal id (see listMarkers).',
+      inputShape: () => ({ ids: z.array(z.string()).min(1) }),
+      mutating: true,
+      batchable: true,
+      run: ({ manager }, args) => removeMarkersHandler(manager, args)
+    },
+    {
       name: 'getBuildInfo',
       description: 'Get a summary of the active project (size, bounding box, block counts).',
       inputShape: () => ({}),
@@ -436,7 +522,7 @@ export function buildToolDefs(): ToolDef[] {
     description:
       `Run up to ${MAX_BATCH_OPERATIONS} build operations in one call. Each operation is { tool, args } with the ` +
       'same arguments as the tool itself. Allowed tools: setBlock, setBlocks, fillBox, outlineBox, wall, line, ' +
-      'sphere, cylinder, copyRegion, stackRegion, replaceInRegion, clearRegion, decayRegion, placeTemplate. ' +
+      'sphere, cylinder, copyRegion, stackRegion, replaceInRegion, clearRegion, decayRegion, placeTemplate, addMarkers, removeMarkers. ' +
       'All operations are validated before any runs. If one fails at runtime the batch stops there and the ' +
       'earlier operations stay applied; the error says how many were applied. The project is saved once at the end.',
     inputShape: () => ({

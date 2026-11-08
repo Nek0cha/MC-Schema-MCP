@@ -1,3 +1,4 @@
+import type { MapSettings, Marker, StoredMarker } from './markers.js';
 import { blockStateKey, type BlockState, type Vec3 } from './types.js';
 
 export interface BoundingBox {
@@ -46,6 +47,12 @@ export class BuildProject {
   private readonly chunkRevisions = new Map<string, number>();
   private readonly removedRevisions = new Map<string, number>();
   private bboxCache: BoundingBox | null | undefined;
+  private markers: StoredMarker[] = [];
+  private nextMarkerId = 1;
+  private markersChanged = false;
+
+  /** Raid map settings; null until setMapSettings is called. Saved in project.json. */
+  mapSettings: MapSettings | null = null;
 
   // Hot-path caches for consecutive writes.
   private lastKey: string | null = null;
@@ -224,6 +231,68 @@ export class BuildProject {
       }
     }
     return counts;
+  }
+
+  // --- markers ---
+
+  getMarkers(): readonly StoredMarker[] {
+    return this.markers;
+  }
+
+  /**
+   * Adds markers and returns their internal ids ("m1", "m2", ...). `extract.id` and
+   * `patrol_route.id` must be unique per kind. If any marker is invalid, none is added.
+   */
+  addMarkers(markers: Marker[]): string[] {
+    const seen = {
+      extract: new Set(this.markers.flatMap((m) => (m.kind === 'extract' ? [m.id] : []))),
+      patrol_route: new Set(this.markers.flatMap((m) => (m.kind === 'patrol_route' ? [m.id] : [])))
+    };
+    for (const m of markers) {
+      if (m.kind !== 'extract' && m.kind !== 'patrol_route') continue;
+      const ids = seen[m.kind];
+      if (ids.has(m.id)) throw new Error(`Duplicate ${m.kind} id "${m.id}". Ids must be unique per kind.`);
+      ids.add(m.id);
+    }
+    const ids: string[] = [];
+    for (const m of markers) {
+      const markerId = `m${this.nextMarkerId++}`;
+      this.markers.push({ ...m, markerId } as StoredMarker);
+      ids.push(markerId);
+    }
+    if (ids.length > 0) this.markersChanged = true;
+    return ids;
+  }
+
+  /** Removes markers by internal id and returns how many existed. Ids are never reused. */
+  removeMarkers(ids: string[]): number {
+    const wanted = new Set(ids);
+    const before = this.markers.length;
+    this.markers = this.markers.filter((m) => !wanted.has(m.markerId));
+    const removed = before - this.markers.length;
+    if (removed > 0) this.markersChanged = true;
+    return removed;
+  }
+
+  /** True when the markers changed since they were last saved or restored. */
+  get markersDirty(): boolean {
+    return this.markersChanged;
+  }
+
+  /** The number the next marker id will get ("m<n>"); persisted so ids are never reused. */
+  get nextMarkerNumber(): number {
+    return this.nextMarkerId;
+  }
+
+  clearMarkersDirty(): void {
+    this.markersChanged = false;
+  }
+
+  /** Replaces the markers with stored ones (used when loading). Leaves the markers clean. */
+  restoreMarkers(markers: StoredMarker[], nextId: number): void {
+    this.markers = markers;
+    this.nextMarkerId = nextId;
+    this.markersChanged = false;
   }
 
   // --- persistence support ---
