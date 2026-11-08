@@ -13,10 +13,9 @@ pnpm install
 pnpm build          # tsc でビルド（dist/）。サーバー用とブラウザ用（tsconfig.client.json）の 2 回走る
 pnpm test           # vitest run（全テスト） + test/ の型チェック
 pnpm test:watch     # vitest watch モード
-pnpm test:perf      # 大規模フィル（400x80x400）の性能テスト（通常の pnpm test には含まれない）
+pnpm test:perf      # 性能テスト（400x80x400 のフィルと、480x80x480 のレイドマップの検証・書き出し。通常の pnpm test には含まれない）
 pnpm start          # ビルド済みサーバーを stdio で起動
 pnpm test:e2e       # 実際の Edge/Chrome で renderView を撮影する結合テスト（手動、通常のテストには含まれない）
-pnpm test:perf      # 大きなプロジェクトの性能テスト（手動）
 ```
 
 単体テストを1ファイルだけ回す場合:
@@ -50,10 +49,14 @@ index.ts -> server.ts (MCPツール登録) -> tools/*.ts (薄いハンドラ) ->
   - **サーバー API** — `server.ts` の `/api/status`、`/api/palette`、`/api/chunks`。ブラウザは 2 秒おきに `/api/status` を見て、`revision` が進んでいれば `/api/chunks?since=` で変わったチャンクだけを取る（変わったチャンクの隣 6 チャンクも送り直す。空になって消えたチャンクは状態 1）。チャンクの中身は表示用パレット（`display-palette.ts`、プロジェクトごとに追記のみ）の番号で、フェンス・ガラス板・壁は `resolveConnectionAt` で接続を解決した状態が入る。アセットが ready になると表示用パレットを再焼き込みして `paletteVersion` を上げ、ビューアはパレットを全部取り直して全チャンクを作り直す。バイナリ形式は `chunk-codec.ts`（Node の API を使わない。gzip はサーバーが `Content-Encoding` で掛ける）。`/vendor/three/…` は `node_modules/three` を配信し、パスの `..` は 404。
   - **ブラウザ側** — `client/`。`mesher.ts` と `camera-presets.ts` は DOM にも `three` にも依存しない純粋なモジュールで、Node の vitest でテストする（Worker から読むので、モデルの型以外は import しない）。`viewer.ts`（three.js、`OrbitControls`、DDA での選択、断面スライダー）、`mesh-worker.ts`、`atlas.ts`（1024×1024、16px のタイル）は `tsconfig.client.json`（DOM の型あり）で `dist/preview/client/` に出力され、サーバーが `/client/*.js` として配信する。メインの `tsconfig.json` は `src/preview/client` を除外している。アセットが使えない間は `colorFor` の色で塗り、それでも `window.__previewReady` になる。WebGL が作れないときは `window.__previewError`。
   - **`renderView`** — `render-view.ts` の `ViewRenderer` が `playwright-core` で Edge → Chrome の順に起動し（引数 `--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader`）、ブラウザを 1 つ使い回して 5 分使われなければ閉じる（MCP の終了時にも閉じる）。`BrowserLauncher` がテストで差し替える口。
+- **レイドマップ（`src/raid/`、`src/core/markers.ts`、`marker-ops.ts`、`src/schematic/structure-writer.ts`）** — 抽出シューター MOD 用のマップを書き出す。`setMapSettings` で `BuildProject.mapSettings`（id・名前・大きさ・`targetVersion`・`includeAir`）を設定し、マーカー（`player_spawn`/`extract`/`loot`/`enemy_spawn`/`patrol_route`。`pos` は足のあるマス）を `addMarkers` で置く。どちらも `project.json` の `map` と `markers.json` に保存される。マップの座標はプロジェクトの座標そのままで、範囲は `(0,0,0)`〜`size-1`。`copyRegion`/`stackRegion` はマーカーをコピーしないが、`saveTemplate`/`placeTemplate` は `loot` と `enemy_spawn` を回転・反転つきで運ぶ。
+  - **`exportRaidMap`**（`export.ts`）— `<outputDir>/tiles/tile_<tx>_<tz>.nbt`（48×48 の StructureTemplate。タイルごとに 1 つずつ書き、マップ全体の NBT をメモリに作らない。書く前に古い `tile_*.nbt` だけ消す）、`map.json`（spec §7 のキーと順序、snake_case）、`preview.png`（`preview-png.ts`、自前の `png.ts` でエンコード。色はアセットがあればテクスチャの平均色、なければ `colorFor`）、`preview-legend.txt`、`validation.json` を書く。検証でエラーが出ても書き出しは止まらない。
+  - **検証**（`validate.ts`、`walk-grid.ts`）— `validateRaidMap(project, map, markers, extras?)`。歩行グリッド（段差 1 ブロックまで、斜め移動なし）で到達性を調べる。検証 6・7 は `extras.tiles`/`extras.previewWritten`、12 は `extras.compat`（`compat.ts` の `checkCompat`）から。`validateRaidMap` ツールはファイルを書かないので 6・7 を省く。互換性チェックの `AssetStore` は `targetVersion` ごとに `PreviewServerState`（`assetsForVersion`）で共有し、取得に最大 120 秒待つ。取れなければ「確かめられなかった」という警告だけ出す。
+  - **3D プレビュー** — `GET /api/markers` をビューアがステータスと一緒にポーリングし、`viewer.ts` が `overlayGroup` に描く（URL の `markers=0`、`renderView` の `markers: false` で消せる）。
 - **`src/tools/registry.ts`** — ツールの表（`ToolDef`: 名前、説明、zod スキーマ、`mutating`、`batchable`、ハンドラ）。`server.ts` の登録と `batch` の両方がこの表を使うので、ツールを足すときはここに 1 件足す。`mutating: true` のツールは登録時に `withSave` で包まれる。`batchable: true` は `setBlock`/`setBlocks`/`fillBox`/`outlineBox`/`wall`/`line`/`sphere`/`cylinder`/`copyRegion`/`stackRegion`/`replaceInRegion`/`clearRegion`/`decayRegion`/`placeTemplate` の 14 個だけ。
 - **`src/tools/batch-tool.ts`** — `batch`。全操作を各ツールの zod スキーマで事前検証し（1 件でも不正なら 1 件も実行しない）、先頭から順に実行する。実行中のエラーで止まり、適用済みの変更は残してレスポンスに適用済みの件数を書く。保存は `batch` 全体で 1 回。
 - **`src/tools/*.ts`** — 各MCPツールのハンドラ。ロジックは持たず、`core`/`schematic` を呼んで `textResult()`（`result.ts`）で包むだけ。例外の `renderView` は画像とテキストを返す（`ToolImageResult`）。
-- **自動保存** — `mutating: true` のツール（`setBlock`/`setBlocks`/`fillBox`/`outlineBox`/`wall`/`line`/`sphere`/`cylinder`/`copyRegion`/`stackRegion`/`replaceInRegion`/`clearRegion`/`decayRegion`/`placeTemplate`/`batch`）は `server.ts` の `withSave()` で包まれ、ハンドラの後に `manager.saveActive()` が呼ばれる。保存に失敗すると `isError: true` で「メモリ上には適用済み、再実行不要」と返し、dirty は残るので次の変更で再試行される。
+- **自動保存** — `mutating: true` のツール（`setBlock`/`setBlocks`/`fillBox`/`outlineBox`/`wall`/`line`/`sphere`/`cylinder`/`copyRegion`/`stackRegion`/`replaceInRegion`/`clearRegion`/`decayRegion`/`placeTemplate`/`setMapSettings`/`addMarkers`/`removeMarkers`/`batch`）は `server.ts` の `withSave()` で包まれ、ハンドラの後に `manager.saveActive()` が呼ばれる。保存に失敗すると `isError: true` で「メモリ上には適用済み、再実行不要」と返し、dirty は残るので次の変更で再試行される。
 
 ### `registry.ts` のzodスキーマ
 
@@ -63,7 +66,7 @@ index.ts -> server.ts (MCPツール登録) -> tools/*.ts (薄いハンドラ) ->
 
 - `writer.test.ts` は `@enginehub/schematicjs` で実際にNBTを読み戻すラウンドトリップテストが中心（パレット文字列が本家の読み込みと整合するか確認するのが狙い）。
 - `transform.test.ts` は向き・回転・反転の組み合わせを表で検証し、`region-ops.test.ts` は階段の向きと位置が両方正しく変わること、範囲が重なるコピー、`seed` での再現性を確認する。`templates.test.ts` は一時ディレクトリを使う。`batch-tool.test.ts` は `ProjectManager.prototype.saveActive` を spy して、保存が 1 回だけ呼ばれることを確認する。
-- `test/preview/` のモデルとメッシュのテストは自作のフィクスチャだけを使う。`test/tools/render-view.test.ts` はブラウザの起動をモックにする。実際のブラウザを使う `test/e2e/` は通常のテストから外してあり、`pnpm test:e2e` で動かす（初回は `./cache` にアセットをダウンロードする）。500×80×500 の街を `iso_se` で撮るのに 60 秒以内、という目標もここで確かめる。
+- `test/preview/` のモデルとメッシュのテストは自作のフィクスチャだけを使う。`test/tools/render-view.test.ts` はブラウザの起動をモックにする。実際のブラウザを使う `test/e2e/` は通常のテストから外してあり、`pnpm test:e2e` で動かす（初回は `./cache` にアセットをダウンロードする）。500×80×500 の街を `iso_se` で撮るのに 60 秒以内、という目標もここで確かめる。レイドマップのマーカー表示（`markers: false` で消えること）もここ。`test/perf/raid-export.test.ts` は 480×80×480 の疑似的な街で、検証 30 秒以内、書き出し全体 60 秒以内を確かめる。
 - `connections.test.ts` は `resolveConnections()` を直接呼び、隣接ブロックの組み合わせごとに期待するプロパティ値を検証するユニットテストスタイル。
 
 ### プロジェクト専用スキル

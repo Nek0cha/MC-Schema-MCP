@@ -1,6 +1,6 @@
 ---
 name: building-minecraft-schematics
-description: Use when constructing Minecraft builds or .schem schematics through the mc-schema-mcp server (createProject, fillBox, cylinder, wall, outlineBox, setBlocks, copyRegion, placeTemplate, batch, decayRegion, renderView, previewBuild, exportSchematic) - towers, castles, houses, walls, roofs, interiors - or when a generated build comes out flat, boxy, monotonous, or the footprint overflows its size budget.
+description: Use when constructing Minecraft builds or .schem schematics through the mc-schema-mcp server (createProject, fillBox, cylinder, wall, outlineBox, setBlocks, copyRegion, placeTemplate, batch, decayRegion, renderView, previewBuild, exportSchematic, setMapSettings, addMarkers, validateRaidMap, exportRaidMap) - towers, castles, houses, walls, roofs, interiors - or when a generated build comes out flat, boxy, monotonous, or the footprint overflows its size budget.
 ---
 
 # Building Minecraft Schematics
@@ -98,6 +98,20 @@ You can see the build with `renderView`, so do not design blind. After every sta
 
 If the image is plain colors instead of textures, the texture download is not finished or failed (the text says which); the shapes are still right. `renderView` needs Microsoft Edge or Google Chrome on the machine.
 
+## Raid Maps
+
+For a raid map (a shooter mod's arena, exported as 48x48 `.nbt` tiles plus `map.json`), the project coordinates are the map coordinates: the map covers `(0,0,0)` to `size-1`. With 16 underground layers the ground surface is about y=16, and feet stand one above it. `pos` of every marker is **the cell the feet occupy** (for `loot`: the cell the crate goes in).
+
+**Order:** `createProject` -> `setMapSettings` -> terrain (16 layers below, then the ground) -> perimeter wall -> roads -> buildings from templates -> `decayRegion` -> markers -> `renderView` -> `validateRaidMap` -> fix -> `exportRaidMap`.
+
+- Prefer a size that is a multiple of 48 (384, 432, 480): edge tiles are then 48x48 too.
+- Keep `loot` cells as air (the mod places the crate); a barrel is allowed. `saveTemplate`/`placeTemplate` carry `loot` and `enemy_spawn` markers with the building, rotated and flipped. `copyRegion`/`stackRegion` do not copy markers.
+- Use only blocks that exist in the target version (default 1.21.1): no copper bars, no newer wood types. If `validateRaidMap`/`exportRaidMap` warns about an id or property, replace it.
+- Walking rules the validation uses: steps of at most 1 block up or down (no jumping down from roofs, so a rooftop route that needs a drop counts as unreachable), no diagonal moves, wooden doors and open gates are passable, iron doors, fences, walls and closed gates are not. A slab between two steps makes a 2-block climb passable. Enemy corridors should be at least 2 wide (patrol routes are checked and warned about).
+- Terrain rules the validation does not check, so check them yourself with `renderView`: cover at both height 1 and height 2, cover about every 20 blocks, 1-high 1-deep obstacles to climb over, 1-high windows, wooden doors or open doorways only, no trapdoors blocking a path, light sources indoors, and a closed perimeter.
+- Counts that the validation warns about: at least 6 player spawns, 60+ blocks apart, and at least 4 extracts. A tier 3 crate should have a tier 3 enemy spawn within 32 blocks.
+- `validateRaidMap` returns the first 20 errors and warnings; the full list is in `validation.json` after `exportRaidMap`. When a route is unreachable the message names the nearest cell that was reached, which is where the path breaks. Problems never stop the export, so read the result before handing the files over.
+
 ## Checklist
 
 - [ ] Silhouette decided before any material
@@ -108,6 +122,7 @@ If the image is plain colors instead of textures, the texture download is not fi
 - [ ] Looked at the build with `renderView` (overview from two corners, close-ups of the doubtful parts) after each stage, and no id is drawn as a magenta/black checker
 - [ ] `getBuildInfo` bounding box matches the size budget and shows no isolated pane/bar warning (or each one is intended)
 - [ ] `exportSchematic` run and the output file confirmed on disk
+- [ ] Raid map: `validateRaidMap` shows no errors (or each is understood) and `exportRaidMap` was run
 
 ## Reference
 
