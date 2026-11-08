@@ -16,6 +16,8 @@ export interface RegionResult {
   changed: number;
   bounds: BoundingBox | null;
   rubble?: number;
+  /** placeTemplate only: how many markers were added. */
+  markers?: number;
 }
 
 export type StackDirection = 'north' | 'south' | 'east' | 'west' | 'up' | 'down';

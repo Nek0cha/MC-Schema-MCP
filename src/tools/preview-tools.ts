@@ -1,6 +1,7 @@
+import { dirname } from 'node:path';
 import type { ProjectManager } from '../core/project-manager.js';
 import type { Vec3 } from '../core/types.js';
-import type { AssetStore } from '../preview/assets/asset-store.js';
+import { AssetStore } from '../preview/assets/asset-store.js';
 import type { ViewPreset } from '../preview/client/camera-presets.js';
 import { ViewRenderer, type BrowserLauncher } from '../preview/render-view.js';
 import { PreviewServer } from '../preview/server.js';
@@ -12,10 +13,30 @@ export interface PreviewServerState {
   assets?: AssetStore;
   /** Shared headless browser for renderView; it only starts on the first render. */
   renderer: ViewRenderer;
+  /** Asset stores created for raid-map compatibility checks, one per Minecraft version. */
+  versionAssets?: Map<string, AssetStore>;
 }
 
 export function createPreviewServerState(assets?: AssetStore, launcher?: BrowserLauncher): PreviewServerState {
   return { server: null, assets, renderer: new ViewRenderer({ launcher }) };
+}
+
+/**
+ * The asset store for one Minecraft version: the preview's store when it has that version,
+ * otherwise one created next to it (same cache directory) and kept for later calls.
+ */
+export function assetsForVersion(state: PreviewServerState, version: string): AssetStore {
+  const known = [state.server?.assets, state.assets].find((a) => a?.version === version);
+  if (known) return known;
+  const map = (state.versionAssets ??= new Map());
+  let store = map.get(version);
+  if (!store) {
+    const sibling = state.server?.assets ?? state.assets;
+    const cacheDir = sibling ? dirname(dirname(sibling.root)) : (process.env.MC_SCHEMA_CACHE_DIR ?? './cache');
+    store = new AssetStore({ cacheDir, version });
+    map.set(version, store);
+  }
+  return store;
 }
 
 async function ensureServer(
@@ -52,6 +73,8 @@ export interface RenderViewArgs {
   width?: number;
   height?: number;
   ortho?: boolean;
+  /** Draw the raid map markers (default true). */
+  markers?: boolean;
   project?: string;
 }
 
@@ -113,6 +136,7 @@ export async function renderViewHandler(
   }
   if (args.clipY !== undefined) query.set('clipY', String(args.clipY));
   if (args.ortho) query.set('ortho', '1');
+  if (args.markers === false) query.set('markers', '0');
 
   const size = {
     width: clampSize(args.width, DEFAULT_WIDTH, MAX_WIDTH),

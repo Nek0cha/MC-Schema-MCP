@@ -18,7 +18,7 @@ describe('buildViewer3dHtml', () => {
 
   it('links to the 2D viewer and has the elements the viewer script needs', () => {
     expect(html).toContain('href="/2d');
-    for (const id of ['canvas', 'presets', 'clip', 'tooltip', 'unresolved', 'assets']) {
+    for (const id of ['canvas', 'presets', 'clip', 'tooltip', 'unresolved', 'assets', 'markersToggle']) {
       expect(html).toContain(`id="${id}"`);
     }
   });

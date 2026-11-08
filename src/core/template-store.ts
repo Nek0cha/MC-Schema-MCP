@@ -3,6 +3,7 @@ import { join, resolve } from 'node:path';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { assertSafeName } from './names.js';
 import { writeAtomic } from './project-store.js';
+import type { TemplateMarker } from './marker-ops.js';
 import type { BlockState } from './types.js';
 
 export const TEMPLATE_FORMAT_VERSION = 1;
@@ -21,6 +22,8 @@ export interface TemplateData extends TemplateInfo {
   palette: (BlockState | null)[];
   /** index = (y * sizeZ + z) * sizeX + x */
   blocks: Uint16Array;
+  /** loot / enemy_spawn markers; `pos` is an offset from the anchor. Absent when there are none. */
+  markers?: TemplateMarker[];
 }
 
 interface TemplateFile extends TemplateInfo {
@@ -28,6 +31,7 @@ interface TemplateFile extends TemplateInfo {
   palette: (BlockState | null)[];
   /** base64 of gzip(Uint16 little-endian palette numbers) */
   blocks: string;
+  markers?: TemplateMarker[];
 }
 
 const TRASH_DIR = '.trash';
@@ -73,6 +77,7 @@ export function saveTemplateFile(root: string, data: TemplateData, overwrite: bo
     anchor: data.anchor,
     palette: data.palette,
     blocks: encodeBlocks(data.blocks),
+    ...(data.markers && data.markers.length > 0 ? { markers: data.markers } : {}),
     createdAt: data.createdAt
   };
   if (existing !== undefined && existing !== data.name) {
@@ -122,6 +127,7 @@ function parseTemplateFile(path: string, name: string): TemplateData {
     anchor: file.anchor,
     palette: file.palette,
     blocks,
+    ...(Array.isArray(file.markers) && file.markers.length > 0 ? { markers: file.markers } : {}),
     createdAt: file.createdAt
   };
 }

@@ -56,6 +56,7 @@ const initialView = (VIEW_PRESETS as readonly string[]).includes(params.get('vie
   ? (params.get('view') as ViewPreset)
   : 'iso_se';
 const clipParam = params.get('clipY');
+const markersParam = params.get('markers') !== '0';
 
 if (!showUi) document.body.classList.add('no-ui');
 
@@ -100,7 +101,7 @@ try {
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x8fb4d9);
 const chunkGroup = new THREE.Group();
-/** Reserved for later overlays (markers etc.); nothing draws into it yet. */
+/** Raid map markers (see the markers section). */
 const overlayGroup = new THREE.Group();
 scene.add(chunkGroup, overlayGroup);
 
@@ -289,6 +290,151 @@ function applyMesh(msg: MeshedMessage): void {
   needsRender = true;
 }
 
+// ---------------------------------------------------------------- markers
+
+type Pos3 = [number, number, number];
+type MarkerData =
+  | { kind: 'player_spawn'; markerId: string; pos: Pos3; facing: number }
+  | { kind: 'extract'; markerId: string; id: string; pos: Pos3; radius: number }
+  | { kind: 'loot'; markerId: string; pos: Pos3; type: string; tier: number }
+  | { kind: 'enemy_spawn'; markerId: string; pos: Pos3; squadSize: [number, number]; tier: number }
+  | { kind: 'patrol_route'; markerId: string; id: string; points: Pos3[] };
+
+// Same colors as the preview.png plan view.
+const MARKER_COLOR = {
+  player_spawn: 0x28c83c,
+  extract: 0x00c8ff,
+  enemy_spawn: 0xe61e1e,
+  patrol_route: 0xff8c00,
+  loot: [0xffeb82, 0xffcd00, 0xb48c00]
+};
+
+let markersVisible = markersParam;
+let markersSignature = '';
+const markerTargets: THREE.Object3D[] = [];
+
+function describeMarker(m: MarkerData): string {
+  const at = (p: Pos3) => `(${p[0]}, ${p[1]}, ${p[2]})`;
+  switch (m.kind) {
+    case 'player_spawn':
+      return `player spawn ${m.markerId} ${at(m.pos)} facing ${m.facing}`;
+    case 'extract':
+      return `extract "${m.id}" ${m.markerId} ${at(m.pos)} radius ${m.radius}`;
+    case 'loot':
+      return `loot ${m.markerId} ${at(m.pos)} ${m.type} tier ${m.tier}`;
+    case 'enemy_spawn':
+      return `enemy spawn ${m.markerId} ${at(m.pos)} squad ${m.squadSize[0]}-${m.squadSize[1]} tier ${m.tier}`;
+    case 'patrol_route':
+      return `patrol route "${m.id}" ${m.markerId}, ${m.points.length} points`;
+  }
+}
+
+function clearMarkerObjects(): void {
+  for (const child of [...overlayGroup.children]) {
+    overlayGroup.remove(child);
+    child.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      mesh.geometry?.dispose();
+      (mesh.material as THREE.Material | undefined)?.dispose();
+    });
+  }
+  markerTargets.length = 0;
+}
+
+function pillar(pos: Pos3, color: number, label: string): THREE.Mesh {
+  // pos is the cell the feet occupy: the column covers that cell and the one above it.
+  const mesh = new THREE.Mesh(
+    new THREE.BoxGeometry(0.6, 2, 0.6),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.6, depthWrite: false })
+  );
+  mesh.position.set(pos[0] + 0.5, pos[1] + 1, pos[2] + 0.5);
+  mesh.userData.label = label;
+  markerTargets.push(mesh);
+  return mesh;
+}
+
+function lineObject(points: THREE.Vector3[], color: number, loop = false): THREE.Line {
+  const material = new THREE.LineBasicMaterial({ color, depthTest: false });
+  const geometry = new THREE.BufferGeometry().setFromPoints(points);
+  const line = loop ? new THREE.LineLoop(geometry, material) : new THREE.Line(geometry, material);
+  line.renderOrder = 10;
+  return line;
+}
+
+function buildMarkerObjects(markers: MarkerData[]): void {
+  clearMarkerObjects();
+  for (const m of markers) {
+    const label = describeMarker(m);
+    if (m.kind === 'player_spawn') {
+      overlayGroup.add(pillar(m.pos, MARKER_COLOR.player_spawn, label));
+      // Minecraft yaw: 0 = south (+z), 90 = west (-x).
+      const yaw = (m.facing * Math.PI) / 180;
+      const from = new THREE.Vector3(m.pos[0] + 0.5, m.pos[1] + 1, m.pos[2] + 0.5);
+      const to = from.clone().add(new THREE.Vector3(-Math.sin(yaw) * 2, 0, Math.cos(yaw) * 2));
+      overlayGroup.add(lineObject([from, to], MARKER_COLOR.player_spawn));
+    } else if (m.kind === 'extract') {
+      overlayGroup.add(pillar(m.pos, MARKER_COLOR.extract, label));
+      const ring: THREE.Vector3[] = [];
+      for (let i = 0; i < 64; i++) {
+        const a = (i / 64) * Math.PI * 2;
+        ring.push(new THREE.Vector3(m.pos[0] + 0.5 + Math.cos(a) * m.radius, m.pos[1] + 0.05, m.pos[2] + 0.5 + Math.sin(a) * m.radius));
+      }
+      overlayGroup.add(lineObject(ring, MARKER_COLOR.extract, true));
+    } else if (m.kind === 'enemy_spawn') {
+      overlayGroup.add(pillar(m.pos, MARKER_COLOR.enemy_spawn, label));
+    } else if (m.kind === 'loot') {
+      const color = MARKER_COLOR.loot[Math.min(2, Math.max(0, m.tier - 1))];
+      const box = new THREE.Mesh(
+        new THREE.BoxGeometry(1.04, 1.04, 1.04),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.25, depthWrite: false })
+      );
+      box.position.set(m.pos[0] + 0.5, m.pos[1] + 0.5, m.pos[2] + 0.5);
+      box.userData.label = label;
+      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(box.geometry), new THREE.LineBasicMaterial({ color, depthTest: false }));
+      edges.renderOrder = 10;
+      box.add(edges);
+      markerTargets.push(box);
+      overlayGroup.add(box);
+    } else {
+      const points = m.points.map((p) => new THREE.Vector3(p[0] + 0.5, p[1] + 0.5, p[2] + 0.5));
+      overlayGroup.add(lineObject(points, MARKER_COLOR.patrol_route));
+      // Thin lines are hard to hover; a small column at each point carries the label.
+      for (const p of m.points) overlayGroup.add(pillar(p, MARKER_COLOR.patrol_route, label));
+    }
+  }
+  overlayGroup.visible = markersVisible;
+  needsRender = true;
+}
+
+async function syncMarkers(): Promise<void> {
+  if (!markersParam) return;
+  const data = await getJson<{ markers: MarkerData[] }>(apiUrl('/api/markers'));
+  const signature = JSON.stringify(data.markers);
+  if (signature === markersSignature) return;
+  markersSignature = signature;
+  buildMarkerObjects(data.markers);
+}
+
+function pickMarker(clientX: number, clientY: number): string | null {
+  if (!markersVisible || markerTargets.length === 0) return null;
+  const { w, h } = viewportSize();
+  const ray = new THREE.Raycaster();
+  ray.setFromCamera(new THREE.Vector2((clientX / w) * 2 - 1, -(clientY / h) * 2 + 1), camera);
+  const hit = ray.intersectObjects(markerTargets, false)[0];
+  return hit ? (hit.object.userData.label as string) : null;
+}
+
+function setupMarkerToggle(): void {
+  const box = el<HTMLInputElement>('markersToggle');
+  box.checked = markersVisible;
+  if (!markersParam) box.disabled = true;
+  box.addEventListener('change', () => {
+    markersVisible = box.checked;
+    overlayGroup.visible = markersVisible;
+    needsRender = true;
+  });
+}
+
 // ---------------------------------------------------------------- data sync
 
 function resetPalette(): void {
@@ -362,6 +508,7 @@ async function sync(): Promise<void> {
     const first = status === null;
     status = next;
     updateToolbar();
+    await syncMarkers();
     const assetsChanged = next.assets.state === 'ready' !== texturesOn;
     if (first || next.revision !== revision || next.paletteVersion !== paletteVersion || assetsChanged) {
       await fetchChunks();
@@ -571,6 +718,14 @@ function setupPicking(): void {
       tooltip.style.display = 'none';
       return;
     }
+    const markerLabel = pickMarker(e.clientX, e.clientY);
+    if (markerLabel) {
+      tooltip.style.display = 'block';
+      tooltip.style.left = `${e.clientX + 12}px`;
+      tooltip.style.top = `${e.clientY + 12}px`;
+      tooltip.textContent = markerLabel;
+      return;
+    }
     const hit = pick(e.clientX, e.clientY);
     if (!hit) {
       tooltip.style.display = 'none';
@@ -625,6 +780,7 @@ function stats(): void {
 async function main(): Promise<void> {
   if (!renderer) return;
   buildPresetButtons();
+  setupMarkerToggle();
   setupPicking();
   startWorkers();
   window.addEventListener('resize', resize);

@@ -74,11 +74,26 @@ Claude Code の MCP サーバー設定に以下を追加してください（`cl
 | `getBuildInfo` | - | アクティブプロジェクトのサイズ・バウンディングボックス・ブロック数集計を返す |
 | `exportSchematic` | - | アクティブプロジェクトを `./output/<projectName>.schem` に書き出し、書き出し先の絶対パスを返す |
 | `previewBuild` | - | アクティブプロジェクトをテクスチャ付きの3Dビューアで確認できるローカルサーバーを起動し、URLを返す（従来の2Dレイヤー表示は `/2d`） |
-| `renderView` | `view?, focus?: { from, to }, clipY?, width?, height?, ortho?, project?` | 3Dビューアをヘッドレスの Edge/Chrome で撮影し、PNG 画像で返す（AI が自分の建築物を確認するためのツール） |
+| `renderView` | `view?, focus?: { from, to }, clipY?, width?, height?, ortho?, markers?, project?` | 3Dビューアをヘッドレスの Edge/Chrome で撮影し、PNG 画像で返す（AI が自分の建築物を確認するためのツール） |
 
 3Dビューアは本家のブロックモデルとテクスチャで描きます。初回に client.jar（`MC_SCHEMA_ASSET_VERSION`、既定 `1.21.11`）をダウンロードして `MC_SCHEMA_CACHE_DIR`（既定 `./cache`）に必要な部分だけを展開します（再配布はしません）。オフラインなどで取得できないときは、ブロックごとの色で描きます。`renderView` には Microsoft Edge か Google Chrome が必要です。
 
 **エクスポートの上限:** 1軸あたり32767ブロック、合計1,600万セル（バウンディングボックスの体積、疎に配置していても密なフォーマットとして書き出すため）。超えると `exportSchematic` はエラーを返します。
+
+### レイドマップの書き出し
+
+NeoForge 用の抽出シューター MOD に渡すマップ一式を書き出せます。アクティブなプロジェクトを「マップ」として設定し、マーカーを置いて、1 回の呼び出しで書き出します。
+
+| ツール | 引数 | 説明 |
+|---|---|---|
+| `setMapSettings` | `id, name, size: [x, y, z], targetVersion?, includeAir?` | プロジェクトをレイドマップにする。範囲は `(0,0,0)`〜`size-1`。`targetVersion` は `1.21.1`（既定）か `1.21.11`、`includeAir` の既定は `true`（未設定のマスも空気として書く） |
+| `addMarkers` | `markers: Marker[]` | `player_spawn` / `extract` / `loot` / `enemy_spawn` / `patrol_route` を置く（`pos` は足のあるマス）。内部 ID を返す。`batch` でも使える |
+| `listMarkers` | `kind?` | マーカーを種類ごとに一覧する |
+| `removeMarkers` | `ids: string[]` | 内部 ID でマーカーを削除する。`batch` でも使える |
+| `validateRaidMap` | - | ファイルを書かずに検証する（範囲、立てるマス、スポーンから脱出地点への到達、巡回ルート、箱の位置、数、外周、ガラス板） |
+| `exportRaidMap` | `outputDir?` | `./output/maps/<id>/` に `tiles/tile_<x>_<z>.nbt`（48×48）、`map.json`、`preview.png`、`preview-legend.txt`、`validation.json` を書き、検証結果を返す。問題があっても書き出しは止まらない |
+
+1.21.1 に存在しないブロック ID やプロパティは警告します（`targetVersion` の client.jar を `MC_SCHEMA_CACHE_DIR` に取得して照合します。取得できなければ「確かめられなかった」と警告します）。マーカーは 3D ビューアと `renderView` に色分けして表示されます（`renderView` の `markers: false` で消せます）。
 
 ## 開発
 
@@ -86,6 +101,7 @@ Claude Code の MCP サーバー設定に以下を追加してください（`cl
 pnpm test    # vitest + テストファイルの型チェック
 pnpm build   # tsc（サーバー用とブラウザ用）
 pnpm test:e2e # 実際の Edge/Chrome での renderView の結合テスト（手動）
+pnpm test:perf # 大規模フィルとレイドマップの書き出しの性能テスト（手動）
 pnpm start   # ビルド済みサーバーを stdio で起動
 ```
 

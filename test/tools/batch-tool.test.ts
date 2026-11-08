@@ -103,7 +103,9 @@ describe('batch tool', () => {
         'replaceInRegion',
         'clearRegion',
         'decayRegion',
-        'placeTemplate'
+        'placeTemplate',
+        'addMarkers',
+        'removeMarkers'
       ].sort()
     );
   });

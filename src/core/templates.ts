@@ -1,5 +1,6 @@
 import type { BuildProject } from './build-project.js';
 import { applyReplacement, matchesAny, type BlockMatcher, type KeepProperties } from './block-match.js';
+import { isTemplateMarker, transformMarker } from './marker-ops.js';
 import { createRng, pickFromPalette } from './random.js';
 import type { RegionResult } from './region-ops.js';
 import type { BlockOrPalette } from './shapes.js';
@@ -79,6 +80,29 @@ export function saveTemplate(
     ? [opts.anchor.x - min.x, opts.anchor.y - min.y, opts.anchor.z - min.z]
     : [Math.floor((size[0] - 1) / 2), 0, Math.floor((size[2] - 1) / 2)];
 
+  // loot / enemy_spawn markers inside the range travel with the template, as offsets from the anchor.
+  const markers = project
+    .getMarkers()
+    .filter(isTemplateMarker)
+    .filter(
+      (m) =>
+        m.pos[0] >= min.x &&
+        m.pos[0] <= max.x &&
+        m.pos[1] >= min.y &&
+        m.pos[1] <= max.y &&
+        m.pos[2] >= min.z &&
+        m.pos[2] <= max.z
+    )
+    .map((m) => {
+      const { markerId: _markerId, ...rest } = m;
+      const pos: [number, number, number] = [
+        m.pos[0] - (min.x + anchor[0]),
+        m.pos[1] - (min.y + anchor[1]),
+        m.pos[2] - (min.z + anchor[2])
+      ];
+      return { ...rest, pos };
+    });
+
   const data: TemplateData = {
     name,
     ...(opts.description !== undefined ? { description: opts.description } : {}),
@@ -86,6 +110,7 @@ export function saveTemplate(
     anchor,
     palette,
     blocks,
+    ...(markers.length > 0 ? { markers } : {}),
     createdAt: new Date().toISOString()
   };
   saveTemplateFile(root, data, opts.overwrite ?? false);
@@ -132,6 +157,11 @@ export function placeTemplate(
     }
   }
 
+  const placedMarkers = (data.markers ?? []).map((m) =>
+    transformMarker(m, (o) => [at.x + o[0], at.y + o[1], at.z + o[2]], t)
+  );
+  if (placedMarkers.length > 0) project.addMarkers(placedMarkers);
+
   const min = { x: Infinity, y: Infinity, z: Infinity };
   const max = { x: -Infinity, y: -Infinity, z: -Infinity };
   for (const cx of [0, sx - 1]) {
@@ -145,5 +175,5 @@ export function placeTemplate(
   }
   min.y = at.y - ay;
   max.y = at.y - ay + sy - 1;
-  return { changed, bounds: { min, max } };
+  return { changed, bounds: { min, max }, ...(placedMarkers.length > 0 ? { markers: placedMarkers.length } : {}) };
 }

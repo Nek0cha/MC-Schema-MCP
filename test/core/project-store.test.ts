@@ -139,4 +139,69 @@ describe('project-store', () => {
     expect(second.palette[0]).toBeNull();
     expect(second.formatVersion).toBe(1);
   });
+
+  describe('map settings and markers', () => {
+    const settings = {
+      id: 'ruined_town',
+      name: 'Ruined Town',
+      size: [96, 80, 96] as [number, number, number],
+      targetVersion: '1.21.1' as const,
+      includeAir: true
+    };
+
+    it('round-trips map settings and markers', () => {
+      const p = new BuildProject('raid');
+      p.setBlock({ x: 0, y: 0, z: 0 }, { id: 'minecraft:stone' });
+      p.mapSettings = settings;
+      p.addMarkers([
+        { kind: 'player_spawn', pos: [1, 1, 1], facing: 90 },
+        { kind: 'extract', id: 'e1', pos: [5, 1, 5], radius: 4 },
+        { kind: 'patrol_route', id: 'r1', points: [[1, 1, 1], [9, 1, 1]] }
+      ]);
+      saveProject(root, p);
+      expect(p.markersDirty).toBe(false);
+      const q = loadProject(root, 'raid');
+      expect(q.mapSettings).toEqual(settings);
+      expect(q.getMarkers()).toEqual(p.getMarkers());
+      // Ids keep counting after a reload.
+      expect(q.addMarkers([{ kind: 'loot', pos: [2, 1, 2], type: 'crate', tier: 1 }])).toEqual(['m4']);
+    });
+
+    it('loads old projects that have neither map nor markers.json', () => {
+      const p = new BuildProject('old');
+      p.setBlock({ x: 0, y: 0, z: 0 }, { id: 'minecraft:stone' });
+      saveProject(root, p);
+      expect(existsSync(join(projectDir(root, 'old'), 'markers.json'))).toBe(false);
+      const q = loadProject(root, 'old');
+      expect(q.mapSettings).toBeNull();
+      expect(q.getMarkers()).toEqual([]);
+      expect(q.blockCount).toBe(1);
+    });
+
+    it('writes markers.json only when markers changed', () => {
+      const p = new BuildProject('lazy');
+      p.addMarkers([{ kind: 'player_spawn', pos: [1, 1, 1], facing: 0 }]);
+      saveProject(root, p);
+      const file = join(projectDir(root, 'lazy'), 'markers.json');
+      const old = new Date(Date.now() - 60_000);
+      utimesSync(file, old, old);
+      p.setBlock({ x: 0, y: 0, z: 0 }, { id: 'minecraft:stone' });
+      saveProject(root, p);
+      expect(statSync(file).mtimeMs).toBeCloseTo(old.getTime(), -2);
+      p.removeMarkers(['m1']);
+      saveProject(root, p);
+      expect(loadProject(root, 'lazy').getMarkers()).toEqual([]);
+    });
+
+    it('rejects a markers.json with an unsupported formatVersion', () => {
+      const p = new BuildProject('bad');
+      p.addMarkers([{ kind: 'player_spawn', pos: [1, 1, 1], facing: 0 }]);
+      saveProject(root, p);
+      writeFileSync(
+        join(projectDir(root, 'bad'), 'markers.json'),
+        JSON.stringify({ formatVersion: 99, nextId: 2, markers: [] })
+      );
+      expect(() => loadProject(root, 'bad')).toThrow(/markers.json/);
+    });
+  });
 });

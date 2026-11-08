@@ -62,6 +62,7 @@ export function placeTemplateHandler(
     seed: args.seed
   });
   return textResult(
-    `Placed ${formatCount(result.changed)} block(s) from template "${args.name}" at ${formatBounds(result.bounds)}.`
+    `Placed ${formatCount(result.changed)} block(s) from template "${args.name}" at ${formatBounds(result.bounds)}` +
+      (result.markers ? ` and ${result.markers} marker(s).` : '.')
   );
 }

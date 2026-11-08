@@ -200,6 +200,13 @@ describe('renderViewHandler', () => {
     expect(rec.viewports).toEqual([{ width: 800, height: 600 }]);
   });
 
+  it('passes markers=0 only when markers are turned off', async () => {
+    await renderViewHandler(manager, state, { markers: false });
+    expect(new URL(rec.urls[0]).searchParams.get('markers')).toBe('0');
+    await renderViewHandler(manager, state, {});
+    expect(new URL(rec.urls[1]).searchParams.has('markers')).toBe(false);
+  });
+
   it('defaults to iso_se at 1280x800 and omits unset parameters', async () => {
     await renderViewHandler(manager, state, {});
     const url = new URL(rec.urls[0]);
