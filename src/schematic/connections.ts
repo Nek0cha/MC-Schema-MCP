@@ -22,15 +22,31 @@ function isFenceGate(id: string): boolean {
 }
 
 function isPaneFamily(id: string): boolean {
-  return id.endsWith('_pane') || id === 'minecraft:iron_bars';
+  return id.endsWith('_pane') || id.endsWith('_bars');
+}
+
+function isWoodenFence(id: string): boolean {
+  return isFenceFamily(id) && id !== 'minecraft:nether_brick_fence';
 }
 
 function isWallFamily(id: string): boolean {
   return id.endsWith('_wall');
 }
 
-function isGlassBlock(id: string): boolean {
-  return id.endsWith('_glass') || id === 'minecraft:glass' || id === 'minecraft:tinted_glass';
+/**
+ * Blocks that panes, fences and walls refuse to attach to even though they
+ * are full cubes (vanilla's isExceptionForConnection).
+ */
+const CONNECTION_EXCEPTION_IDS = new Set([
+  'minecraft:pumpkin',
+  'minecraft:carved_pumpkin',
+  'minecraft:jack_o_lantern',
+  'minecraft:melon',
+  'minecraft:barrier'
+]);
+
+function isConnectionException(id: string): boolean {
+  return CONNECTION_EXCEPTION_IDS.has(id) || id.endsWith('_leaves') || id.endsWith('shulker_box');
 }
 
 /**
@@ -57,12 +73,13 @@ const NON_FULL_BLOCK_SUFFIXES = [
   '_bed',
   '_torch',
   '_candle',
-  '_rail'
+  '_rail',
+  '_bars',
+  '_chain'
 ];
 
 const NON_FULL_BLOCK_IDS = new Set([
   'minecraft:air',
-  'minecraft:iron_bars',
   'minecraft:ladder',
   'minecraft:lantern',
   'minecraft:lever',
@@ -70,6 +87,7 @@ const NON_FULL_BLOCK_IDS = new Set([
   'minecraft:tripwire_hook',
   'minecraft:vine',
   'minecraft:chain',
+  'minecraft:iron_chain',
   'minecraft:cobweb',
   'minecraft:flower_pot',
   'minecraft:cake',
@@ -77,22 +95,21 @@ const NON_FULL_BLOCK_IDS = new Set([
 ]);
 
 function isSolidFullCube(id: string): boolean {
-  if (NON_FULL_BLOCK_IDS.has(id)) return false;
+  if (NON_FULL_BLOCK_IDS.has(id) || isConnectionException(id)) return false;
   return !NON_FULL_BLOCK_SUFFIXES.some((suffix) => id.endsWith(suffix));
 }
 
-function fenceConnectsTo(neighborId: string): boolean {
+/** Wooden fences join each other; nether brick fences join only nether brick fences. */
+function fenceConnectsTo(fenceId: string, neighborId: string): boolean {
   if (neighborId === AIR) return false;
-  if (isFenceFamily(neighborId)) return true;
+  if (isFenceFamily(neighborId)) return isWoodenFence(fenceId) === isWoodenFence(neighborId);
   if (isFenceGate(neighborId)) return true;
-  if (isGlassBlock(neighborId)) return false;
   return isSolidFullCube(neighborId);
 }
 
 function paneConnectsTo(neighborId: string): boolean {
   if (neighborId === AIR) return false;
-  if (isPaneFamily(neighborId)) return true;
-  if (isGlassBlock(neighborId)) return false;
+  if (isPaneFamily(neighborId) || isWallFamily(neighborId)) return true;
   return isSolidFullCube(neighborId);
 }
 
@@ -106,7 +123,7 @@ type WallHeight = 'none' | 'low' | 'tall';
 function wallConnectsTo(neighborId: string): WallHeight {
   if (neighborId === AIR) return 'none';
   if (isWallFamily(neighborId)) return 'tall';
-  if (isGlassBlock(neighborId)) return 'none';
+  if (isPaneFamily(neighborId)) return 'low';
   return isSolidFullCube(neighborId) ? 'low' : 'none';
 }
 
@@ -177,7 +194,10 @@ export function resolveConnections(project: BuildProject): Map<string, BlockStat
   project.forEachBlock((pos, block) => {
     const key = voxelKey(pos);
     if (isFenceFamily(block.id)) {
-      resolved.set(key, withDirectionalConnections(project, pos, block, fenceConnectsTo));
+      resolved.set(
+        key,
+        withDirectionalConnections(project, pos, block, (neighborId) => fenceConnectsTo(block.id, neighborId))
+      );
     } else if (isPaneFamily(block.id)) {
       resolved.set(key, withDirectionalConnections(project, pos, block, paneConnectsTo));
     } else if (isWallFamily(block.id)) {
@@ -185,4 +205,38 @@ export function resolveConnections(project: BuildProject): Map<string, BlockStat
     }
   });
   return resolved;
+}
+
+const MAX_LISTED_ISOLATED = 20;
+
+/**
+ * Panes and bars with no horizontal neighbor to attach to; they render as
+ * thin posts. Fences and walls are skipped on purpose: standing alone as a
+ * post is a normal use for them. Ordered y, then z, then x.
+ */
+export function findIsolatedConnectables(project: BuildProject): Vec3[] {
+  const resolved = resolveConnections(project);
+  const found: Vec3[] = [];
+  project.forEachBlock((pos, block) => {
+    if (!isPaneFamily(block.id)) return;
+    const props = resolved.get(voxelKey(pos))?.properties;
+    if (props && DIRECTIONS.every((direction) => props[direction] === 'false')) {
+      found.push({ x: pos.x, y: pos.y, z: pos.z });
+    }
+  });
+  return found.sort((a, b) => a.y - b.y || a.z - b.z || a.x - b.x);
+}
+
+export function formatIsolatedWarning(positions: Vec3[]): string {
+  if (positions.length === 0) return '';
+  const listed = positions
+    .slice(0, MAX_LISTED_ISOLATED)
+    .map((p) => `(${p.x},${p.y},${p.z})`)
+    .join(', ');
+  const more = positions.length > MAX_LISTED_ISOLATED ? ` (+${positions.length - MAX_LISTED_ISOLATED} more)` : '';
+  return (
+    `Warning: ${positions.length} isolated pane/bar/fence block(s) have no horizontal neighbor to connect to ` +
+    `and will render as thin posts: ${listed}${more}. Put a solid block or another pane next to them, ` +
+    `or use full glass blocks on diagonal/curved walls.`
+  );
 }

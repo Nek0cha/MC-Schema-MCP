@@ -35,3 +35,26 @@ describe('info tool handlers', () => {
     expect(result.content[0].text).toMatch(/output[\\/]info-test\.schem/);
   });
 });
+
+describe('isolated pane warning', () => {
+  afterEach(() => {
+    if (existsSync('./output/warn-test.schem')) rmSync('./output/warn-test.schem');
+  });
+
+  it('is appended to getBuildInfo and exportSchematic when a pane is isolated', () => {
+    const manager = new ProjectManager();
+    manager.createProject('warn-test');
+    manager.getActive().setBlock({ x: 0, y: 0, z: 0 }, { id: 'minecraft:glass_pane' });
+    expect(getBuildInfoHandler(manager).content[0].text).toContain('Warning: 1 isolated');
+    expect(exportSchematicHandler(manager).content[0].text).toContain('Warning: 1 isolated');
+  });
+
+  it('is absent when nothing is isolated', () => {
+    const manager = new ProjectManager();
+    manager.createProject('warn-test');
+    manager.getActive().setBlock({ x: 0, y: 0, z: 0 }, { id: 'minecraft:glass_pane' });
+    manager.getActive().setBlock({ x: 1, y: 0, z: 0 }, { id: 'minecraft:glass' });
+    expect(getBuildInfoHandler(manager).content[0].text).not.toContain('Warning');
+    expect(exportSchematicHandler(manager).content[0].text).not.toContain('Warning');
+  });
+});
