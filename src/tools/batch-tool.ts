@@ -76,7 +76,8 @@ export function batchHandler(
     try {
       const out = def.run(ctx, opArgs);
       if (out instanceof Promise) return failure('tool returned an asynchronous result, which a batch cannot run.');
-      result = out;
+      if (out.content.some((c) => c.type !== 'text')) return failure('tool returned non-text content, which a batch cannot run.');
+      result = out as ToolTextResult;
     } catch (error) {
       return failure(error instanceof Error ? error.message : String(error));
     }

@@ -3,7 +3,8 @@ import type { ProjectManager } from '../core/project-manager.js';
 import { setBlockHandler, setBlocksHandler } from './block-tools.js';
 import { batchHandler, MAX_BATCH_OPERATIONS } from './batch-tool.js';
 import { getBuildInfoHandler, exportSchematicHandler } from './info-tools.js';
-import { previewBuildHandler, type PreviewServerState } from './preview-tools.js';
+import { VIEW_PRESETS, type ViewPreset } from '../preview/client/camera-presets.js';
+import { previewBuildHandler, renderViewHandler, type PreviewServerState } from './preview-tools.js';
 import {
   createProjectHandler,
   deleteProjectHandler,
@@ -17,7 +18,7 @@ import {
   replaceInRegionHandler,
   stackRegionHandler
 } from './region-tools.js';
-import type { ToolTextResult } from './result.js';
+import type { ToolResult } from './result.js';
 import {
   fillBoxHandler,
   outlineBoxHandler,
@@ -50,7 +51,7 @@ export interface ToolDef {
   batchable: boolean;
   /** Unwrapped handler: no saving, arguments already validated against inputShape. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  run: (ctx: ToolContext, args: any) => ToolTextResult | Promise<ToolTextResult>;
+  run: (ctx: ToolContext, args: any) => ToolResult | Promise<ToolResult>;
 }
 
 // Factories, not shared instances: each call site gets its own zod schema
@@ -398,6 +399,32 @@ export function buildToolDefs(): ToolDef[] {
       mutating: false,
       batchable: false,
       run: ({ manager, previewState }) => previewBuildHandler(manager, previewState)
+    },
+    {
+      name: 'renderView',
+      description:
+        'Render the project in the 3D preview with headless Edge/Chrome and return a PNG so you can see what you built. ' +
+        'Check your work with it after each stage: take an overview from above with an iso_* view, then use `focus` ' +
+        'for a close look at a part you are unsure about. For interiors, `clipY` hides everything above that height, ' +
+        'so an iso_* view looks into the rooms. Blocks use the real Minecraft textures when they are cached ' +
+        '(otherwise plain colors); ids that do not resolve are drawn as a magenta/black checker and listed in the text. ' +
+        'Views: top (north up), iso_ne/iso_nw/iso_se/iso_sw (45 degrees, seen from that corner), north/south/east/west ' +
+        '(horizontal, seen from that side). The first call may take a while if the textures still have to be downloaded.',
+      inputShape: () => ({
+        view: z.enum(VIEW_PRESETS as unknown as [ViewPreset, ...ViewPreset[]]).optional().describe('Default iso_se.'),
+        focus: z
+          .object({ from: z.object(vec3Shape()), to: z.object(vec3Shape()) })
+          .optional()
+          .describe('Box to frame. Omit for the whole project.'),
+        clipY: z.number().int().optional().describe('Do not draw blocks above this Y.'),
+        width: z.number().int().min(64).max(1920).optional().describe('Default 1280.'),
+        height: z.number().int().min(64).max(1200).optional().describe('Default 800.'),
+        ortho: z.boolean().optional().describe('Orthographic projection; only used with view "top".'),
+        project: projectNameSchema().optional().describe('Default: the active project.')
+      }),
+      mutating: false,
+      batchable: false,
+      run: ({ manager, previewState }, args) => renderViewHandler(manager, previewState, args)
     }
   ];
 

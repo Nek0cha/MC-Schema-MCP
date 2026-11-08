@@ -65,11 +65,16 @@ export function createServer(options: CreateServerOptions = {}): McpServer {
           if (result instanceof Promise) {
             throw new Error(`Tool ${def.name} is marked mutating but returned an asynchronous result.`);
           }
-          return result;
+          return result as ToolTextResult;
         });
       }
     );
   }
+
+  // Shut the shared headless browser down together with the MCP session.
+  server.server.onclose = () => {
+    void ctx.previewState.renderer.close();
+  };
 
   return server;
 }

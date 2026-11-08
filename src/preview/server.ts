@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { createRequire } from 'node:module';
@@ -61,6 +62,16 @@ function threeRoot(): string {
   return dirname(dirname(createRequire(import.meta.url).resolve('three')));
 }
 
+/**
+ * The compiled browser scripts. Next to this file when running from dist/; when running the
+ * TypeScript sources directly (vitest e2e) only dist/ has the .js files.
+ */
+function defaultClientDir(): string {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const candidates = [join(here, 'client'), join(here, '..', '..', 'dist', 'preview', 'client')];
+  return candidates.find((dir) => existsSync(join(dir, 'viewer.js'))) ?? candidates[0];
+}
+
 function defaultAssets(): AssetStore {
   return new AssetStore({
     cacheDir: process.env.MC_SCHEMA_CACHE_DIR ?? './cache',
@@ -95,11 +106,25 @@ export class PreviewServer {
   ) {
     this.manager = manager;
     this.assetStore = options.assets ?? defaultAssets();
-    this.clientDir = options.clientDir ?? join(dirname(fileURLToPath(import.meta.url)), 'client');
+    this.clientDir = options.clientDir ?? defaultClientDir();
   }
 
   get assets(): AssetStore {
     return this.assetStore;
+  }
+
+  /**
+   * Block ids of the project's displayed blocks that have no model, once the assets are ready
+   * (before that every id is "unresolved" by construction, which says nothing about the ids).
+   */
+  unresolvedIds(project: BuildProject): string[] {
+    if (this.assetStore.state !== 'ready') return [];
+    const { palette } = this.viewOf(project);
+    const ids = new Set<string>();
+    for (const e of palette.entriesSince(0)) {
+      if (e.model?.status === 'unresolved') ids.add(e.key.split('[')[0]);
+    }
+    return [...ids].sort();
   }
 
   /** Starts the asset download in the background; failures show up in /api/status instead of being thrown. */
