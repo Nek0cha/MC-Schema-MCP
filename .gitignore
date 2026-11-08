@@ -4,3 +4,4 @@ output/
 projects/
 *.log
 templates/
+cache/

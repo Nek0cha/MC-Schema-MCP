@@ -13,14 +13,15 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
     "@enginehub/nbt-ts": "^1.4.1",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "fflate": "^0.8.3",
     "zod": "^3.25.0"
   },
   "devDependencies": {
     "@enginehub/schematicjs": "^0.10.0",
+    "@types/node": "^22.10.0",
     "typescript": "^5.7.0",
-    "vitest": "^3.0.0",
-    "@types/node": "^22.10.0"
+    "vitest": "^3.0.0"
   }
 }
