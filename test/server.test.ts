@@ -111,3 +111,16 @@ describe('withSave', () => {
     expect(withSave(manager, () => textResult('hello')).content[0].text).toBe('hello');
   });
 });
+
+describe('project name validation', () => {
+  it.each(['nul', 'COM1', 'town '])('rejects %j as a project name', async (name) => {
+    const server = createServer();
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'c', version: '0.0.0' });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    const result = await client.callTool({ name: 'createProject', arguments: { name } });
+    expect(result.isError).toBe(true);
+    await client.close();
+    await server.close();
+  });
+});

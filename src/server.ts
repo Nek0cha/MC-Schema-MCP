@@ -27,7 +27,13 @@ const vec3Shape = () => ({ x: z.number().int(), y: z.number().int(), z: z.number
 const projectNameSchema = () =>
   z
     .string()
-    .regex(/^[A-Za-z0-9][A-Za-z0-9 _-]*$/, 'Project name may contain only letters, digits, spaces, hyphens and underscores.');
+    .regex(/^[A-Za-z0-9][A-Za-z0-9 _-]*$/, 'Project name may contain only letters, digits, spaces, hyphens and underscores.')
+    // Names become directory names: Windows strips trailing spaces and reserves device names.
+    .refine((name) => !name.endsWith(' '), 'Project name must not end with a space.')
+    .refine(
+      (name) => !/^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(name),
+      'Project name must not be a reserved Windows device name (CON, PRN, AUX, NUL, COM1-9, LPT1-9).'
+    );
 const blockStateSchema = () =>
   z.object({
     id: z.string(),
