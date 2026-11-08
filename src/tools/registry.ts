@@ -20,6 +20,8 @@ import {
 } from './region-tools.js';
 import {
   addMarkersHandler,
+  exportRaidMapHandler,
+  validateRaidMapHandler,
   listMarkersHandler,
   removeMarkersHandler,
   setMapSettingsHandler
@@ -456,6 +458,27 @@ export function buildToolDefs(): ToolDef[] {
       mutating: true,
       batchable: true,
       run: ({ manager }, args) => removeMarkersHandler(manager, args)
+    },
+    {
+      name: 'validateRaidMap',
+      description:
+        'Check the active raid map without writing files: coordinates in range, standable points, spawn-to-extract ' +
+        'and patrol connectivity, loot cells, counts, perimeter and glass panes. Returns OK or the errors and warnings.',
+      inputShape: () => ({}),
+      mutating: false,
+      batchable: false,
+      run: ({ manager }) => validateRaidMapHandler(manager)
+    },
+    {
+      name: 'exportRaidMap',
+      description:
+        'Write the active raid map to <outputDir> (default ./output/maps/<map id>/): 48x48 tile_<x>_<z>.nbt files, ' +
+        'map.json, preview.png, preview-legend.txt and validation.json, then report the validation. Problems found ' +
+        'never stop the export. Needs setMapSettings first; may wait up to two minutes for the target version assets.',
+      inputShape: () => ({ outputDir: z.string().min(1).optional() }),
+      mutating: false,
+      batchable: false,
+      run: ({ manager, previewState }, args) => exportRaidMapHandler(manager, previewState, args)
     },
     {
       name: 'getBuildInfo',
