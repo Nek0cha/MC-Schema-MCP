@@ -4,8 +4,33 @@ import { cylinder } from '../../src/core/shapes.js';
 import {
   findIsolatedConnectables,
   formatIsolatedWarning,
+  resolveConnectionAt,
   resolveConnections
 } from '../../src/schematic/connections.js';
+
+describe('resolveConnectionAt', () => {
+  it('matches resolveConnections for every connectable block and is undefined otherwise', () => {
+    const p = new BuildProject('t');
+    p.setBlock({ x: 0, y: 0, z: 0 }, { id: 'minecraft:oak_fence' });
+    p.setBlock({ x: 1, y: 0, z: 0 }, { id: 'minecraft:oak_fence' });
+    p.setBlock({ x: 0, y: 0, z: 1 }, { id: 'minecraft:stone' });
+    p.setBlock({ x: 5, y: 0, z: 0 }, { id: 'minecraft:glass_pane' });
+    p.setBlock({ x: 6, y: 0, z: 0 }, { id: 'minecraft:glass_pane' });
+    p.setBlock({ x: 10, y: 0, z: 0 }, { id: 'minecraft:cobblestone_wall' });
+    p.setBlock({ x: 11, y: 0, z: 0 }, { id: 'minecraft:cobblestone_wall' });
+    p.setBlock({ x: 12, y: 0, z: 0 }, { id: 'minecraft:cobblestone_wall' });
+    p.setBlock({ x: 11, y: 1, z: 0 }, { id: 'minecraft:stone' });
+
+    const resolved = resolveConnections(p);
+    expect(resolved.size).toBe(7);
+    for (const [key, expected] of resolved) {
+      const [x, y, z] = key.split(',').map(Number);
+      expect(resolveConnectionAt(p, { x, y, z })).toEqual(expected);
+    }
+    expect(resolveConnectionAt(p, { x: 0, y: 0, z: 1 })).toBeUndefined();
+    expect(resolveConnectionAt(p, { x: 99, y: 0, z: 0 })).toBeUndefined();
+  });
+});
 
 function keyOf(x: number, y: number, z: number): string {
   return `${x},${y},${z}`;

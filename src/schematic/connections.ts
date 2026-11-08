@@ -191,20 +191,27 @@ function withWallConnections(project: BuildProject, pos: Vec3, block: BlockState
  */
 export function resolveConnections(project: BuildProject): Map<string, BlockState> {
   const resolved = new Map<string, BlockState>();
-  project.forEachBlock((pos, block) => {
-    const key = voxelKey(pos);
-    if (isFenceFamily(block.id)) {
-      resolved.set(
-        key,
-        withDirectionalConnections(project, pos, block, (neighborId) => fenceConnectsTo(block.id, neighborId))
-      );
-    } else if (isPaneFamily(block.id)) {
-      resolved.set(key, withDirectionalConnections(project, pos, block, paneConnectsTo));
-    } else if (isWallFamily(block.id)) {
-      resolved.set(key, withWallConnections(project, pos, block));
-    }
+  project.forEachBlock((pos) => {
+    const state = resolveConnectionAt(project, pos);
+    if (state) resolved.set(voxelKey(pos), state);
   });
   return resolved;
+}
+
+/**
+ * Connection-resolved state of the block at `pos`, or undefined when that
+ * block is not a fence, pane, bars or wall (or the cell is empty). Reads
+ * only the block and its neighbors; never mutates the project.
+ */
+export function resolveConnectionAt(project: BuildProject, pos: Vec3): BlockState | undefined {
+  const block = project.getBlock(pos);
+  if (!block) return undefined;
+  if (isFenceFamily(block.id)) {
+    return withDirectionalConnections(project, pos, block, (neighborId) => fenceConnectsTo(block.id, neighborId));
+  }
+  if (isPaneFamily(block.id)) return withDirectionalConnections(project, pos, block, paneConnectsTo);
+  if (isWallFamily(block.id)) return withWallConnections(project, pos, block);
+  return undefined;
 }
 
 const MAX_LISTED_ISOLATED = 20;

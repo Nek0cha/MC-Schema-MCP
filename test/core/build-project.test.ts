@@ -118,3 +118,39 @@ describe('BuildProject', () => {
     expect(seen).toEqual(['0,0,0=minecraft:dirt']);
   });
 });
+
+describe('BuildProject revisions', () => {
+  it('bumps revision only on real changes and reports changed and removed chunks', () => {
+    const p = new BuildProject('t');
+    expect(p.revision).toBe(0);
+    p.setBlock({ x: 0, y: 0, z: 0 }, { id: 'minecraft:stone' });
+    p.setBlock({ x: 0, y: 0, z: 0 }, { id: 'minecraft:stone' });
+    expect(p.revision).toBe(1);
+    p.setBlock({ x: 20, y: 0, z: 0 }, { id: 'minecraft:stone' });
+    const r = p.revision;
+    p.removeBlock({ x: 20, y: 0, z: 0 });
+    expect(p.getChunkRevisionsSince(r)).toEqual([{ key: chunkKey(1, 0, 0), revision: r + 1, removed: true }]);
+    expect(p.getChunkRevisionsSince(0).map((c) => c.key).sort()).toEqual(
+      [chunkKey(0, 0, 0), chunkKey(1, 0, 0)].sort()
+    );
+  });
+
+  it('does not bump revision for no-op removals and clears removal on re-creation', () => {
+    const p = new BuildProject('t');
+    p.removeBlock({ x: 5, y: 5, z: 5 });
+    expect(p.revision).toBe(0);
+    p.setBlock({ x: 0, y: 0, z: 0 }, { id: 'minecraft:stone' });
+    p.removeBlock({ x: 0, y: 0, z: 0 });
+    p.setBlock({ x: 1, y: 0, z: 0 }, { id: 'minecraft:stone' });
+    expect(p.getChunkRevisionsSince(0)).toEqual([{ key: chunkKey(0, 0, 0), revision: 3, removed: false }]);
+  });
+
+  it('starts at revision 1 with all chunks at revision 1 when loaded from storage', () => {
+    const chunk = new Uint16Array(4096);
+    chunk[0] = 1;
+    const p = BuildProject.fromStored('t', [null, { id: 'minecraft:stone' }], new Map([[chunkKey(0, 0, 0), chunk]]));
+    expect(p.revision).toBe(1);
+    expect(p.getChunkRevisionsSince(0)).toEqual([{ key: chunkKey(0, 0, 0), revision: 1, removed: false }]);
+    expect(p.getChunkRevisionsSince(1)).toEqual([]);
+  });
+});
