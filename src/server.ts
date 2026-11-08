@@ -18,6 +18,7 @@ import {
 } from './tools/shape-tools.js';
 import { getBuildInfoHandler, exportSchematicHandler } from './tools/info-tools.js';
 import { previewBuildHandler, createPreviewServerState } from './tools/preview-tools.js';
+import type { ToolTextResult } from './tools/result.js';
 
 // Factories, not shared instances: each call site gets its own zod schema
 // object so zod-to-json-schema inlines the generated JSON Schema instead of
@@ -38,8 +39,47 @@ const blockOrPaletteSchema = () =>
     z.array(z.object({ block: blockStateSchema(), weight: z.number().positive() }))
   ]);
 
-export function createServer(): McpServer {
-  const manager = new ProjectManager();
+/**
+ * Runs a mutating tool handler, then persists the active project. If saving
+ * fails the in-memory change stays applied (and stays dirty, so the next save
+ * retries it) and the result is turned into an error that tells the caller so.
+ */
+export function withSave(manager: ProjectManager, run: () => ToolTextResult): ToolTextResult {
+  let result: ToolTextResult;
+  try {
+    result = run();
+  } catch (error) {
+    try {
+      manager.saveActive();
+    } catch {
+      // Keep the original error; unsaved chunks stay dirty and are retried later.
+    }
+    throw error;
+  }
+  try {
+    manager.saveActive();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Change applied in memory but could not be saved to disk: ${message}. Do not repeat the operation; it will be saved with the next change.`
+        }
+      ],
+      isError: true
+    };
+  }
+  return result;
+}
+
+export interface CreateServerOptions {
+  /** Root directory for project persistence. Omit to keep projects in memory only. */
+  dataDir?: string;
+}
+
+export function createServer(options: CreateServerOptions = {}): McpServer {
+  const manager = new ProjectManager({ dataDir: options.dataDir });
   const previewState = createPreviewServerState();
   const server = new McpServer({ name: 'mc-schema-mcp', version: '0.1.0' });
 
@@ -73,7 +113,7 @@ export function createServer(): McpServer {
       description: 'Set a single block in the active project.',
       inputSchema: { pos: z.object(vec3Shape()), block: blockStateSchema() }
     },
-    async (args) => setBlockHandler(manager, args)
+    async (args) => withSave(manager, () => setBlockHandler(manager, args))
   );
 
   server.registerTool(
@@ -82,7 +122,7 @@ export function createServer(): McpServer {
       description: 'Set multiple blocks in the active project in one call.',
       inputSchema: { blocks: z.array(z.object({ pos: z.object(vec3Shape()), block: blockStateSchema() })) }
     },
-    async (args) => setBlocksHandler(manager, args)
+    async (args) => withSave(manager, () => setBlocksHandler(manager, args))
   );
 
   server.registerTool(
@@ -91,7 +131,7 @@ export function createServer(): McpServer {
       description: 'Fill a solid rectangular box.',
       inputSchema: { from: z.object(vec3Shape()), to: z.object(vec3Shape()), block: blockOrPaletteSchema() }
     },
-    async (args) => fillBoxHandler(manager, args)
+    async (args) => withSave(manager, () => fillBoxHandler(manager, args))
   );
 
   server.registerTool(
@@ -100,7 +140,7 @@ export function createServer(): McpServer {
       description: 'Build a hollow rectangular box (shell only).',
       inputSchema: { from: z.object(vec3Shape()), to: z.object(vec3Shape()), block: blockOrPaletteSchema() }
     },
-    async (args) => outlineBoxHandler(manager, args)
+    async (args) => withSave(manager, () => outlineBoxHandler(manager, args))
   );
 
   server.registerTool(
@@ -114,7 +154,7 @@ export function createServer(): McpServer {
         block: blockOrPaletteSchema()
       }
     },
-    async (args) => wallHandler(manager, args)
+    async (args) => withSave(manager, () => wallHandler(manager, args))
   );
 
   server.registerTool(
@@ -123,7 +163,7 @@ export function createServer(): McpServer {
       description: 'Draw a straight line of blocks between two points.',
       inputSchema: { from: z.object(vec3Shape()), to: z.object(vec3Shape()), block: blockOrPaletteSchema() }
     },
-    async (args) => lineHandler(manager, args)
+    async (args) => withSave(manager, () => lineHandler(manager, args))
   );
 
   server.registerTool(
@@ -137,7 +177,7 @@ export function createServer(): McpServer {
         hollow: z.boolean().optional()
       }
     },
-    async (args) => sphereHandler(manager, args)
+    async (args) => withSave(manager, () => sphereHandler(manager, args))
   );
 
   server.registerTool(
@@ -152,7 +192,7 @@ export function createServer(): McpServer {
         hollow: z.boolean().optional()
       }
     },
-    async (args) => cylinderHandler(manager, args)
+    async (args) => withSave(manager, () => cylinderHandler(manager, args))
   );
 
   server.registerTool(

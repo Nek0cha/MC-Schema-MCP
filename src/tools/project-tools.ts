@@ -17,6 +17,10 @@ export function switchProjectHandler(manager: ProjectManager, args: { name: stri
 }
 
 export function deleteProjectHandler(manager: ProjectManager, args: { name: string }): ToolTextResult {
-  manager.deleteProject(args.name);
-  return textResult(`Deleted project "${args.name}".`);
+  const { trashedTo } = manager.deleteProject(args.name);
+  return textResult(
+    trashedTo
+      ? `Deleted project "${args.name}". Its files were moved to ${trashedTo} and can be restored manually.`
+      : `Deleted project "${args.name}".`
+  );
 }

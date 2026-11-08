@@ -1,7 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { createServer } from '../src/server.js';
+import { ProjectManager } from '../src/core/project-manager.js';
+import { loadProject } from '../src/core/project-store.js';
+import { createServer, withSave } from '../src/server.js';
+import { textResult } from '../src/tools/result.js';
 
 describe('MCP server wiring', () => {
   it('registers tools and runs a basic build flow end-to-end', async () => {
@@ -24,5 +30,84 @@ describe('MCP server wiring', () => {
 
     await client.close();
     await server.close();
+  });
+
+  it('autosaves mutating tool calls so a new server instance can resume', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'mc-srv-'));
+    try {
+      const server = createServer({ dataDir: root });
+      const [ct, st] = InMemoryTransport.createLinkedPair();
+      const client = new Client({ name: 'c', version: '0.0.0' });
+      await Promise.all([server.connect(st), client.connect(ct)]);
+      await client.callTool({ name: 'createProject', arguments: { name: 'saved' } });
+      await client.callTool({
+        name: 'fillBox',
+        arguments: { from: { x: 0, y: 0, z: 0 }, to: { x: 2, y: 2, z: 2 }, block: { id: 'minecraft:stone' } }
+      });
+      await client.close();
+      await server.close();
+
+      const loaded = loadProject(root, 'saved');
+      expect(loaded.blockCount).toBe(27);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('withSave', () => {
+  let root: string;
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), 'mc-ws-'));
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('reports a failed save as an error without asking to retry', () => {
+    const manager = new ProjectManager({ dataDir: root });
+    manager.createProject('p');
+    vi.spyOn(manager, 'saveActive').mockImplementation(() => {
+      throw new Error('ENOSPC: no space left on device');
+    });
+    const result = withSave(manager, () => {
+      manager.getActive().setBlock({ x: 0, y: 0, z: 0 }, { id: 'minecraft:stone' });
+      return textResult('ok');
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/applied in memory/);
+    expect(result.content[0].text).toMatch(/Do not repeat/);
+    expect(result.content[0].text).toMatch(/ENOSPC/);
+    expect(manager.getActive().getBlock({ x: 0, y: 0, z: 0 })).toEqual({ id: 'minecraft:stone' });
+  });
+
+  it('retries previously unsaved chunks on the next change', () => {
+    const manager = new ProjectManager({ dataDir: root });
+    manager.createProject('p');
+    const realSave = manager.saveActive.bind(manager);
+    vi.spyOn(manager, 'saveActive').mockImplementationOnce(() => {
+      throw new Error('disk full');
+    });
+    const first = withSave(manager, () => {
+      manager.getActive().setBlock({ x: 0, y: 0, z: 0 }, { id: 'minecraft:stone' });
+      return textResult('ok');
+    });
+    expect(first.isError).toBe(true);
+    vi.spyOn(manager, 'saveActive').mockImplementation(realSave);
+    const second = withSave(manager, () => {
+      manager.getActive().setBlock({ x: 100, y: 0, z: 0 }, { id: 'minecraft:dirt' });
+      return textResult('ok');
+    });
+    expect(second.isError).toBeUndefined();
+    const loaded = loadProject(root, 'p');
+    expect(loaded.getBlock({ x: 0, y: 0, z: 0 })).toEqual({ id: 'minecraft:stone' });
+    expect(loaded.getBlock({ x: 100, y: 0, z: 0 })).toEqual({ id: 'minecraft:dirt' });
+  });
+
+  it('passes handler results through untouched on success', () => {
+    const manager = new ProjectManager({ dataDir: root });
+    manager.createProject('p');
+    expect(withSave(manager, () => textResult('hello')).content[0].text).toBe('hello');
   });
 });
