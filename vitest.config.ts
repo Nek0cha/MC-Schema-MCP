@@ -7,6 +7,6 @@ export default defineConfig({
     globals: false,
     passWithNoTests: true,
     // Slow performance tests run on demand via `pnpm test:perf`.
-    exclude: [...configDefaults.exclude, 'test/perf/**']
+    exclude: [...configDefaults.exclude, 'test/perf/**', '.claude/**']
   },
 });
