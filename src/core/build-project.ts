@@ -221,6 +221,15 @@ export class BuildProject {
     return this.bboxCache;
   }
 
+  /** Every distinct block state in use with how many cells hold it (cheap: no grid scan). */
+  getStateCounts(): { block: Readonly<BlockState>; count: number }[] {
+    const out: { block: Readonly<BlockState>; count: number }[] = [];
+    for (let i = 1; i < this.palette.length; i++) {
+      if (this.paletteCounts[i] > 0) out.push({ block: this.palette[i] as BlockState, count: this.paletteCounts[i] });
+    }
+    return out;
+  }
+
   getBlockCounts(): Record<string, number> {
     const counts: Record<string, number> = {};
     for (let i = 1; i < this.palette.length; i++) {
