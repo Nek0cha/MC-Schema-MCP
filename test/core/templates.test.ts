@@ -216,4 +216,56 @@ describe('templates', () => {
     writeFileSync(file, JSON.stringify(json));
     expect(() => loadTemplateFile(root, 'tiny')).toThrow();
   });
+
+  describe('markers inside templates', () => {
+    function source(): BuildProject {
+      const src = new BuildProject('src');
+      fillBox(src, { x: 0, y: 0, z: 0 }, { x: 4, y: 0, z: 4 }, stone);
+      // Anchor will be (2, 0, 2); a crate at (4, 1, 3) and an enemy at (0, 1, 1).
+      src.addMarkers([
+        { kind: 'loot', pos: [4, 1, 3], type: 'crate', tier: 2 },
+        { kind: 'enemy_spawn', pos: [0, 1, 1], squadSize: [1, 2], tier: 1 },
+        { kind: 'player_spawn', pos: [1, 1, 1], facing: 0 },
+        { kind: 'loot', pos: [40, 1, 3], type: 'safe', tier: 3 }
+      ]);
+      return src;
+    }
+
+    it('saves only loot and enemy_spawn markers inside the range, relative to the anchor', () => {
+      saveTemplate(root, source(), 'house', { x: 0, y: 0, z: 0 }, { x: 4, y: 3, z: 4 }, { anchor: { x: 2, y: 0, z: 2 } });
+      expect(loadTemplateFile(root, 'house').markers).toEqual([
+        { kind: 'loot', pos: [2, 1, 1], type: 'crate', tier: 2 },
+        { kind: 'enemy_spawn', pos: [-2, 1, -1], squadSize: [1, 2], tier: 1 }
+      ]);
+    });
+
+    it('places markers translated, and rotated together with the blocks', () => {
+      saveTemplate(root, source(), 'house', { x: 0, y: 0, z: 0 }, { x: 4, y: 3, z: 4 }, { anchor: { x: 2, y: 0, z: 2 } });
+      const dest = new BuildProject('dest');
+      const plain = placeTemplate(root, dest, 'house', { x: 100, y: 10, z: 100 });
+      expect(plain.markers).toBe(2);
+      expect(dest.getMarkers().map((m) => (m as { pos: number[] }).pos)).toEqual([
+        [102, 11, 101],
+        [98, 11, 99]
+      ]);
+
+      const rotated = new BuildProject('rot');
+      placeTemplate(root, rotated, 'house', { x: 100, y: 10, z: 100 }, { rotate: 90 });
+      // Offset (2, 1, 1) rotated 90 degrees -> (-1, 1, 2); (-2, 1, -1) -> (1, 1, -2).
+      expect(rotated.getMarkers().map((m) => (m as { pos: number[] }).pos)).toEqual([
+        [99, 11, 102],
+        [101, 11, 98]
+      ]);
+      expect(rotated.getMarkers()[0]).toMatchObject({ kind: 'loot', type: 'crate', tier: 2 });
+    });
+
+    it('does not add a markers field or count when the range has no markers', () => {
+      const src = new BuildProject('src');
+      fillBox(src, { x: 0, y: 0, z: 0 }, { x: 2, y: 0, z: 2 }, stone);
+      saveTemplate(root, src, 'plain', { x: 0, y: 0, z: 0 }, { x: 2, y: 0, z: 2 });
+      expect(loadTemplateFile(root, 'plain').markers).toBeUndefined();
+      const result = placeTemplate(root, new BuildProject('d'), 'plain', { x: 0, y: 0, z: 0 });
+      expect(result.markers).toBeUndefined();
+    });
+  });
 });

@@ -12,9 +12,17 @@ import { endianness } from 'node:os';
 import { join, resolve } from 'node:path';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { BuildProject, parseChunkKey } from './build-project.js';
+import type { MapSettings, StoredMarker } from './markers.js';
 import type { BlockState } from './types.js';
 
 export const FORMAT_VERSION = 1;
+export const MARKERS_FORMAT_VERSION = 1;
+
+interface MarkersFile {
+  formatVersion: number;
+  nextId: number;
+  markers: StoredMarker[];
+}
 
 const CHUNK_BYTES = 4096 * 2;
 const CHUNK_FILE_RE = /^(-?\d+)_(-?\d+)_(-?\d+)\.bin$/;
@@ -24,6 +32,8 @@ interface ProjectFile {
   formatVersion: number;
   name: string;
   palette: (BlockState | null)[];
+  /** Raid map settings; absent for projects that are not maps. */
+  map?: MapSettings;
   createdAt: string;
   updatedAt: string;
 }
@@ -79,10 +89,21 @@ export function saveProject(root: string, project: BuildProject): void {
     formatVersion: FORMAT_VERSION,
     name: project.name,
     palette: [...project.getPalette()] as (BlockState | null)[],
+    ...(project.mapSettings ? { map: project.mapSettings } : {}),
     createdAt: readExistingCreatedAt(jsonPath) ?? now,
     updatedAt: now
   };
   writeAtomic(jsonPath, JSON.stringify(file));
+
+  if (project.markersDirty) {
+    const markersFile: MarkersFile = {
+      formatVersion: MARKERS_FORMAT_VERSION,
+      nextId: project.nextMarkerNumber,
+      markers: [...project.getMarkers()]
+    };
+    writeAtomic(join(dir, 'markers.json'), JSON.stringify(markersFile));
+    project.clearMarkersDirty();
+  }
 
   const done: string[] = [];
   try {
@@ -148,11 +169,47 @@ export function loadProject(root: string, name: string): BuildProject {
     }
   }
 
+  let project: BuildProject;
   try {
-    return BuildProject.fromStored(name, file.palette, chunks);
+    project = BuildProject.fromStored(name, file.palette, chunks);
   } catch (error) {
     return fail(describe(error), error);
   }
+
+  if (file.map !== undefined) {
+    const m = file.map as Partial<MapSettings>;
+    const validSize = Array.isArray(m.size) && m.size.length === 3 && m.size.every((n) => Number.isInteger(n) && n >= 1);
+    if (typeof m.id !== 'string' || typeof m.name !== 'string' || !validSize) {
+      return fail('project.json has an invalid "map" field.');
+    }
+    project.mapSettings = {
+      id: m.id,
+      name: m.name,
+      size: m.size as MapSettings['size'],
+      targetVersion: m.targetVersion === '1.21.11' ? '1.21.11' : '1.21.1',
+      includeAir: m.includeAir !== false
+    };
+  }
+
+  const markersPath = join(dir, 'markers.json');
+  if (existsSync(markersPath)) {
+    let markersFile: MarkersFile;
+    try {
+      markersFile = JSON.parse(readFileSync(markersPath, 'utf8')) as MarkersFile;
+    } catch (error) {
+      return fail(`markers.json is corrupt (${describe(error)}).`, error);
+    }
+    if (markersFile.formatVersion !== MARKERS_FORMAT_VERSION) {
+      return fail(
+        `markers.json has unsupported formatVersion ${String(markersFile.formatVersion)} (expected ${MARKERS_FORMAT_VERSION}).`
+      );
+    }
+    if (!Array.isArray(markersFile.markers) || !Number.isInteger(markersFile.nextId)) {
+      return fail('markers.json is invalid.');
+    }
+    project.restoreMarkers(markersFile.markers, markersFile.nextId);
+  }
+  return project;
 }
 
 /** Moves the project directory to <root>/.trash/<name>-<ms>[-<n>] and returns the absolute destination. */

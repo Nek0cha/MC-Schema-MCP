@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { unzipSync } from 'fflate';
 
@@ -90,6 +90,19 @@ export class AssetStore {
       return JSON.parse(readFileSync(file, 'utf8'));
     } catch {
       return undefined;
+    }
+  }
+
+  /** Block ids (without the namespace) that have a cached blockstate file; empty when nothing is cached. */
+  listBlockstates(): string[] {
+    const dir = this.safePath('blockstates');
+    if (!dir) return [];
+    try {
+      return readdirSync(dir)
+        .filter((name) => name.endsWith('.json'))
+        .map((name) => name.slice(0, -'.json'.length));
+    } catch {
+      return [];
     }
   }
 
