@@ -32,6 +32,6 @@ describe('info tool handlers', () => {
     manager.getActive().setBlock({ x: 0, y: 0, z: 0 }, { id: 'minecraft:stone' });
     const result = exportSchematicHandler(manager);
     expect(existsSync('./output/info-test.schem')).toBe(true);
-    expect(result.content[0].text).toContain('output/info-test.schem');
+    expect(result.content[0].text).toMatch(/output[\\/]info-test\.schem/);
   });
 });

@@ -1,4 +1,4 @@
-import { parseVoxelKey, type BuildProject } from '../core/build-project.js';
+import { voxelKey, type BuildProject } from '../core/build-project.js';
 import type { BlockState, Vec3 } from '../core/types.js';
 
 const AIR = 'minecraft:air';
@@ -174,8 +174,8 @@ function withWallConnections(project: BuildProject, pos: Vec3, block: BlockState
  */
 export function resolveConnections(project: BuildProject): Map<string, BlockState> {
   const resolved = new Map<string, BlockState>();
-  for (const [key, block] of project.voxels) {
-    const pos = parseVoxelKey(key);
+  project.forEachBlock((pos, block) => {
+    const key = voxelKey(pos);
     if (isFenceFamily(block.id)) {
       resolved.set(key, withDirectionalConnections(project, pos, block, fenceConnectsTo));
     } else if (isPaneFamily(block.id)) {
@@ -183,6 +183,6 @@ export function resolveConnections(project: BuildProject): Map<string, BlockStat
     } else if (isWallFamily(block.id)) {
       resolved.set(key, withWallConnections(project, pos, block));
     }
-  }
+  });
   return resolved;
 }

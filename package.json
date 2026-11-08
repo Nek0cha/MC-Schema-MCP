@@ -9,6 +9,7 @@
     "start": "node dist/index.js",
     "typecheck:test": "tsc --noEmit -p tsconfig.test.json",
     "test": "vitest run && pnpm run typecheck:test",
+    "test:perf": "node --expose-gc ./node_modules/vitest/vitest.mjs run --config vitest.perf.config.ts",
     "test:watch": "vitest"
   },
   "dependencies": {

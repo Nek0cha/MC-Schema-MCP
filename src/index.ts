@@ -2,7 +2,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { createServer } from './server.js';
 
 try {
-  const server = createServer();
+  const server = createServer({ dataDir: process.env.MC_SCHEMA_DATA_DIR ?? './projects' });
   const transport = new StdioServerTransport();
   await server.connect(transport);
 } catch (error) {
