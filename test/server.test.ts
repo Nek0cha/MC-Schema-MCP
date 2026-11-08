@@ -55,6 +55,77 @@ describe('MCP server wiring', () => {
   });
 });
 
+describe('tool registration', () => {
+  async function listTools() {
+    const server = createServer();
+    const [ct, st] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'c', version: '0.0.0' });
+    await Promise.all([server.connect(st), client.connect(ct)]);
+    const result = await client.listTools();
+    await client.close();
+    await server.close();
+    return result;
+  }
+
+  it('registers all new tools', async () => {
+    const names = (await listTools()).tools.map((tool) => tool.name);
+    for (const name of [
+      'copyRegion',
+      'stackRegion',
+      'replaceInRegion',
+      'clearRegion',
+      'decayRegion',
+      'saveTemplate',
+      'listTemplates',
+      'deleteTemplate',
+      'placeTemplate',
+      'batch'
+    ]) {
+      expect(names).toContain(name);
+    }
+  });
+
+  it('keeps every existing tool', async () => {
+    const names = (await listTools()).tools.map((tool) => tool.name);
+    for (const name of [
+      'createProject',
+      'listProjects',
+      'switchProject',
+      'deleteProject',
+      'setBlock',
+      'setBlocks',
+      'fillBox',
+      'outlineBox',
+      'wall',
+      'line',
+      'sphere',
+      'cylinder',
+      'getBuildInfo',
+      'exportSchematic',
+      'previewBuild'
+    ]) {
+      expect(names).toContain(name);
+    }
+  });
+
+  it('generates inline JSON schemas without $ref', async () => {
+    expect(JSON.stringify(await listTools())).not.toContain('"$ref"');
+  });
+
+  it('accepts rotate only as 0, 90, 180 or 270', async () => {
+    const server = createServer();
+    const [ct, st] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'c', version: '0.0.0' });
+    await Promise.all([server.connect(st), client.connect(ct)]);
+    await client.callTool({ name: 'createProject', arguments: { name: 'r' } });
+    const base = { from: { x: 0, y: 0, z: 0 }, to: { x: 0, y: 0, z: 0 }, dest: { x: 5, y: 0, z: 0 } };
+    expect((await client.callTool({ name: 'copyRegion', arguments: { ...base, rotate: 45 } })).isError).toBe(true);
+    expect((await client.callTool({ name: 'copyRegion', arguments: { ...base, rotate: 90 } })).isError).toBeFalsy();
+    await client.close();
+    await server.close();
+  });
+});
+
 describe('withSave', () => {
   let root: string;
   beforeEach(() => {
