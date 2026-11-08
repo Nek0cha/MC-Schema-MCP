@@ -393,8 +393,11 @@ export function buildToolDefs(): ToolDef[] {
       name: 'previewBuild',
       description:
         'Start (or reuse) a local preview server for the active project and return its URL. ' +
-        'Open the URL in a browser to see a layer-by-layer 2D view: switch Y layers, hover a ' +
-        'cell for its coordinates and block id, click a cell to copy "x, y, z" to the clipboard.',
+        'Open the URL in a browser to see a textured 3D view built from the real Minecraft models and textures ' +
+        '(downloaded and cached on first use; plain colors until then): orbit, pan and zoom, jump to preset views ' +
+        '(top, iso_*, north/south/east/west), cut everything above a height with the slider, hover a block for its ' +
+        'coordinates and id, click to copy "x, y, z". The page follows changes within a few seconds. ' +
+        'Append /2d to the URL for the older layer-by-layer 2D view. To look at the build yourself, use renderView.',
       inputShape: () => ({}),
       mutating: false,
       batchable: false,

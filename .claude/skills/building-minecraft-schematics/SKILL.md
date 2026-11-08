@@ -1,6 +1,6 @@
 ---
 name: building-minecraft-schematics
-description: Use when constructing Minecraft builds or .schem schematics through the mc-schema-mcp server (createProject, fillBox, cylinder, wall, outlineBox, setBlocks, copyRegion, placeTemplate, batch, decayRegion, exportSchematic) - towers, castles, houses, walls, roofs, interiors - or when a generated build comes out flat, boxy, monotonous, or the footprint overflows its size budget.
+description: Use when constructing Minecraft builds or .schem schematics through the mc-schema-mcp server (createProject, fillBox, cylinder, wall, outlineBox, setBlocks, copyRegion, placeTemplate, batch, decayRegion, renderView, previewBuild, exportSchematic) - towers, castles, houses, walls, roofs, interiors - or when a generated build comes out flat, boxy, monotonous, or the footprint overflows its size budget.
 ---
 
 # Building Minecraft Schematics
@@ -59,6 +59,8 @@ foundation -> shell (towers, then walls) -> carve interior with air
 | `saveTemplate` / `placeTemplate` / `listTemplates` / `deleteTemplate` | reuse a finished building across projects | the anchor is what lands on `at` |
 | `batch` | many operations in one call | validated up front; a runtime error stops it but keeps earlier operations; saved once |
 | `getBuildInfo` | bounding box + block counts | the only way to verify the footprint; also lists isolated panes/bars (see Common Mistakes) |
+| `renderView` | a PNG of the build from any preset view (`iso_*`, `top`, `north`...), optionally framed on a `focus` box and cut at `clipY` | the only way to actually see the build; see "Look, Then Fix" below |
+| `previewBuild` | URL of an interactive 3D viewer for a human (orbit, cut, hover for coordinates); `/2d` for layers | you cannot see it yourself, use `renderView` |
 | `exportSchematic` | writes `./output/<name>.schem` | fences, glass panes, iron bars and walls have their `north/south/east/west/up` connection properties auto-computed from neighbors at export time — don't set them by hand, they'll be overwritten |
 
 ## Common Mistakes
@@ -84,6 +86,18 @@ Placing a whole district block by block takes thousands of calls and the convers
 4. Add variety with `replace` on `placeTemplate` (e.g. oak -> spruce, matching the template's original orientation), or `replaceInRegion` afterwards.
 5. Ruin it with `decayRegion`, then check that doorways and stairs are not blocked. Decay first, validate after.
 
+## Look, Then Fix
+
+You can see the build with `renderView`, so do not design blind. After every stage (shell, interior, roof, lighting), look and correct before going on:
+
+1. Overview: `renderView` with `view: "iso_se"`, then `iso_nw` (or another corner) so no side stays unseen. Judge the silhouette first: is it a recognisable shape, or a box?
+2. Close-ups: `focus: { from, to }` around the part you doubt (a window row, a roof edge, an entrance). Use a small box so the textures are readable.
+3. Interiors: set `clipY` just under the roof or ceiling, and use an `iso_*` view to look into the rooms. Use `view: "top"` with `clipY` for a floor plan.
+4. Read the text next to the image. It lists block ids that did not resolve (they show as a magenta/black checker): fix the typo or the missing property instead of exporting them.
+5. Compare what you see with what you intended (floor height `H`, rhythm, accent lines). Fix with `fillBox`/`setBlocks`/`replaceInRegion`, then look again at the same view so the two images can be compared.
+
+If the image is plain colors instead of textures, the texture download is not finished or failed (the text says which); the shapes are still right. `renderView` needs Microsoft Edge or Google Chrome on the machine.
+
 ## Checklist
 
 - [ ] Silhouette decided before any material
@@ -91,6 +105,7 @@ Placing a whole district block by block takes thousands of calls and the convers
 - [ ] Palette is primary + weathering + one non-random accent
 - [ ] Visible spans computed before placing openings
 - [ ] Carve order written down before building
+- [ ] Looked at the build with `renderView` (overview from two corners, close-ups of the doubtful parts) after each stage, and no id is drawn as a magenta/black checker
 - [ ] `getBuildInfo` bounding box matches the size budget and shows no isolated pane/bar warning (or each one is intended)
 - [ ] `exportSchematic` run and the output file confirmed on disk
 
